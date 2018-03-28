@@ -1,0 +1,10 @@
+lock STEERING to UP.
+stage.
+wait until SHIP:MAXTHRUST = 0.
+stage.
+wait until ALTITUDE > 50000 and SHIP:MAXTHRUST = 0.
+stage.
+wait 1.
+stage.
+wait until ALTITUDE > 100000.
+stage.
