@@ -1,3 +1,4 @@
+@lazyglobal off.
 {
   function tgtPrograde {
     return LOOKDIRUP(-(TARGET:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT), SHIP:FACING:TOPVECTOR).

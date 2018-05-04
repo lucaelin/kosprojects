@@ -15,7 +15,7 @@
     // if lookup:HASKEY(currentImport) return lookup[currentImport]. // TODO: FIND OUT Y NOT WORKING
     // TODO: version management
     //if not EXISTS(path+".lib.ks") {
-      COPYPATH("0:/"+path+".lib.ks", "1:/"+path+".lib.ks").
+    if(HOMECONNECTION:ISCONNECTED) COPYPATH("0:/"+path+".lib.ks", "1:/"+path+".lib.ks").
     //}
     RUNPATH("1:/"+path+".lib.ks").
     return lookup[currentImport].

@@ -1,76 +1,77 @@
+@lazyglobal off.
 {
   function land {
     parameter vesselHeight is 5.
     parameter maxThrottle is 0.6.
+    parameter turnspeed is 1. // change orientation in 1 second
     parameter maxAcc is (SHIP:AVAILABLETHRUST / SHIP:MASS).
     parameter g is (BODY:MU / BODY:RADIUS^2).
 
-    // TODO: body lift might even be stronger than engine thrust, so choose better AoA values.
-    print "READ THE TODO!".
-
-    local Kp is 2.0.
-    local Ki is 0.01.
-    local Kd is 0.1.
-    local THRUSTPID is PIDLOOP(Kp, Ki, Kd).
-    set THRUSTPID:SETPOINT to 0.
-
-    local turnspeed is 2.
-    //TODO: max angle of attack
-    local Kp is 1.0/turnspeed.
-    local Ki is 0.0/turnspeed.
-    local Kd is 1.0/turnspeed.
+    local Kp is 1.0.
+    local Ki is 0.0.
+    local Kd is 1.0.
     local STEERPID is PIDLOOP(Kp, Ki, Kd).
     set STEERPID:SETPOINT to 0.
 
     //local tgt is LATLNG(8.639955, -168.237632). // VAB E
-    local tgt is LATLNG(8.640163554, -168.176736). // PAD
-    local tgtheight is tgt:TERRAINHEIGHT. // TODO: make terrainheight optional in case of non target landing
+    //local tgt is LATLNG(8.640163554, -168.176736). // PAD
+    //local tgt is TARGET.
+    local tgt is VESSEL("landingtest Probe").
+    local tgtheight is tgt:ALTITUDE.//VDOT(-SHIP:UP:VECTOR, tgt:POSITION). // TODO: make terrainheight optional in case of non target landing
     local maxsteer is SQRT(1-maxThrottle^2)/maxThrottle * 0.9.
     local maxsideacc is (SQRT(1-maxThrottle^2) * maxAcc).
     local twr is maxAcc * maxThrottle / g.
 
     lock THROTTLE to 0.
     function steer {
-      parameter tgtpos is tgt:POSITION.
-      parameter AoA is 180. // atm angle of attack
-      parameter invert is false. // atm coasting body lift
+      parameter AoA is 180. // atm angle of attack - negative for atm coasting body lift (inverted steering)
+
+      set invert to false.
+      if AoA < 0 {
+        set invert to SIGN(AoA) < 0.
+        set AoA to ABS(AoA).
+      }
 
       CLEARVECDRAWS().
-      //CLEARSCREEN.
+      CLEARSCREEN.
+      local tgtpos is tgt:POSITION.
+      local tgtvel is (VELOCITY:SURFACE/2 - SHIP:UP:VECTOR*g*twr).
       VECDRAW(V(0,0,0), tgtpos, white, "tgt", 1, true).
       VECDRAW(V(0,0,0), VELOCITY:SURFACE, red, "vel", 1, true).
-      local tgtvel is (VELOCITY:SURFACE:NORMALIZED - SHIP:UP:VECTOR) * VELOCITY:SURFACE:MAG.
-      //set tgtvel:MAG to tgt:MAG.
+      local errsign is SIGN(-VDOT(SHIP:UP:VECTOR, VXCL(tgtpos:NORMALIZED, tgtvel:NORMALIZED))).
+      //set tgtvel:MAG to 100.
       set tgtpos:MAG to tgtvel:MAG.
       local diff is tgtpos - tgtvel.
-      local errsign is SIGN(VDOT(SHIP:UP:VECTOR, diff)).
-      set diff to VXCL(SHIP:UP:VECTOR, diff) / (maxsideacc).
-      VECDRAW(V(0,0,0), diff, green, "diff", 1, true).
+      set diff to VXCL(SHIP:UP:VECTOR, diff).
+      VECDRAW(V(0,0,0), diff, green, "error", 1, true).
       VECDRAW(V(0,0,0), tgtvel, yellow, "tgtvel", 1, true).
-      local error is errsign * diff:MAG.
-      //print error at(0, 5).
+      local error is errsign * (diff:MAG / turnspeed / maxsideacc)^1.
+      print error at(0, 5).
       set diff:MAG to errsign * CLAMP(-maxsteer, maxsteer, STEERPID:UPDATE(TIME:SECONDS, error)).
-      //print diff:MAG at(0, 6).
+      VECDRAW(V(0,0,0), diff, rgb(0,255,255), "diffpid*10", 10, true, 0.2/10).
+      print diff:MAG at(0, 6).
       //VECDRAW(V(0,0,0), -(SHIP:UP:VECTOR - diff)*ABS(SHIP:VERTICALSPEED), blue, "steer", 1, true).
       //VECDRAW(-(SHIP:UP:VECTOR - diff)*ABS(SHIP:VERTICALSPEED), - 2*SHIP:UP:VECTOR, white, "steer", 1, true).
-      local res is (SHIP:UP:VECTOR - diff)*ABS(SHIP:VERTICALSPEED).
+      local res is (SURFACERETROGRADE:VECTOR - diff)*ABS(SHIP:VERTICALSPEED).
       if invert {
         set res to res * ANGLEAXIS(180, SHIP:UP:VECTOR).
       }
-      set res to res + 2*SHIP:UP:VECTOR. //stabilize touchdown
+      set res to res + maxsideacc*SHIP:UP:VECTOR. //stabilize touchdown
+
+
 
       VECDRAW(V(0,0,0), -res, blue, "res", 1, true).
 
       // limit AoA
       if VANG(SURFACERETROGRADE:VECTOR, res) > AoA {
-        set res to SURFACERETROGRADE:VECTOR * ANGLEAXIS(AoA, VCRS(SURFACERETROGRADE:VECTOR, res)).
-        VECDRAW(V(0,0,0), res, white, "AoA limited", 1, true).
+        set res to SURFACERETROGRADE:VECTOR * ANGLEAXIS(AoA, VCRS(SURFACERETROGRADE:VECTOR, res)) * res:MAG.
+        VECDRAW(V(0,0,0), -res, white, "AoA limited", 1, true).
       }
 
       return LOOKDIRUP(res, SHIP:FACING:TOPVECTOR).
     }
 
-    function target {
+    function targetSpeed {
       parameter y is ALTITUDE - tgtheight - vesselHeight.
       parameter maxT is maxThrottle.
       parameter dist is 0.
@@ -85,35 +86,15 @@
     }
 
     wait until SHIP:VERTICALSPEED < 0.
-    lock STEERING to steer(tgt:POSITION, 20, true).
+    lock STEERING to steer(-20).
 
-    wait until target() < -SHIP:VERTICALSPEED.
+    wait until targetSpeed()*1.5 < -SHIP:VERTICALSPEED.
 
-    local gearDone is false.
-    local thrott is 1.
-    lock THROTTLE to thrott.
-    lock STEERING to steer(tgt:POSITION, 45).
-
-    until SHIP:VERTICALSPEED >= 0 or SHIP:AVAILABLETHRUST = 0 {
-      //CLEARSCREEN.
-      //print target() at(0, 0).
-      //print -SHIP:VERTICALSPEED at(0, 1).
-      //print (target() + SHIP:VERTICALSPEED) / (SHIP:AVAILABLETHRUST / SHIP:MASS) at(0, 2).
-
-      local estTimeRem is -SHIP:VERTICALSPEED / (SHIP:AVAILABLETHRUST * maxThrottle / SHIP:MASS - (BODY:MU / BODY:RADIUS^2)).
-      //print estTimeRem at(0, 3).
-      if not gearDone and estTimeRem < 5 {
-        toggle GEAR.
-        set gearDone to true.
-      }
-
-      local error is (target() + SHIP:VERTICALSPEED) / (SHIP:AVAILABLETHRUST / SHIP:MASS).
-      set thrott to maxThrottle + THRUSTPID:UPDATE(TIME:SECONDS, error).
-      wait 0.
-    }
+    lock STEERING to steer(30*5*MAX(0,.42-SHIP:Q)).
+    // code missing
 
     lock THROTTLE to 0.
-    lock STEERING to UP.
+    lock STEERING to UPTOP.
 
     wait 0.
   }

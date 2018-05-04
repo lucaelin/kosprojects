@@ -92,9 +92,10 @@
 
   function verticalAscend {
     parameter speed is 100.
+    parameter thrott is 1.
 
-    lock STEERING to LOOKDIRUP(SHIP:UP:VECTOR, SHIP:FACING:TOPVECTOR).
-    lock THROTTLE to 1.
+    lock STEERING to UPTOP.
+    lock THROTTLE to thrott.
     STAGE.
     wait until SHIP:VELOCITY:SURFACE:MAG > speed.
   }.
