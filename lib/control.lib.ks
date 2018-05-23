@@ -1,10 +1,18 @@
 @lazyglobal off.
 {
+  //*
+  //* This class provides background functionality running without blocking execution
+  //* usually there are two functions one to enable the feature and one to disable it again
+  //*
+
+
   // Automatic staging
   local stagecontrollerActive is false.
 
+  //*
+  //* A controller to automatically stage the craft if there are active engines without any fuel left.
+  //*
   function staging {
-    parameter v is true.
     set stagecontrollerActive to true.
 
     local enginelist is LIST().
@@ -38,7 +46,11 @@
     set stagecontrollerActive to false.
   }
 
-  // Ascend and descend vertical speed controller
+  //*
+  //* Ascend and descend vertical speed controller, adjusting the throttle not the orientation
+  //* parameter targetspeed is a function that needs to return the desired vertical speed
+  //* parameter kP describes how aggressively the engine should change its throttle to match the velocity
+  //*
   local vSpeedActive is false.
 
   function vSpeed {
@@ -74,7 +86,16 @@
     unlock THROTTLE.
   }
 
-  //horizontal speed controller
+
+  //*
+  //* Horizontal speed controller, not adjusting the throttle but the orientation
+  //* The function hSpeedInvert can be used to invert the steering (for use with i.e. bodylift)
+  //* parameter targetVelParam is a function that needs to return a vector for the direction to move in with its magitude to describe the speed
+  //* parameter minThrottle describes the average throttle that is expected
+  //* parameter lookahead describes the time in seconds the system should look ahead of its current state to make predictive decisions
+  //* parameter Klimit is the highest horizontal acceleration the system should use to match the given velocity
+  //* parameter kP describes how aggressively the engine should change its throttle to match the velocity
+  //*
   local hSpeedActive is false.
   local hSpeedInverted is false.
 

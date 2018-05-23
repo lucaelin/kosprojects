@@ -2,6 +2,11 @@
 {
   local control is import("lib/control").
 
+  //*
+  //* function to propulsively land at a given place.
+  //* parameter tgt the target to land at. Can be a Vessel, GeoCoordinate or a String if i should just land somewhere
+  //* more parameters explained in the function itself
+  //*
   function land {
     parameter tgt.
     parameter vThrottle is 0.6. // use max 0.6 of the available thrust for vertical deceleration
@@ -111,6 +116,9 @@
     wait until done.
   }
 
+  //*
+  //* primitive function to land using multiple speedsteps during descent and hysteresis to control the speed
+  //*
   function jebLand {
     print "Coasting to apoapsis.".
     lock STEERING to SURFACERETROGRADE.
@@ -157,6 +165,10 @@
     wait until SHIP:STATUS = "LANDED".
     print "Touchdown.".
   }
+
+  //*
+  //* primitive function to kill (almost) all horizontal speed 
+  //*
   function breakOrbit {
     print "Breaking orbit.".
     lock STEERING to SURFACERETROGRADE.

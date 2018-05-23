@@ -1,5 +1,8 @@
 @lazyglobal off.
 {
+  //*
+  //* get a vector pointing in the direction of thrust with its magitude being the amount of thrust available
+  //*
   function getThrustVector {
     local elist is LIST().
     list ENGINES in elist.

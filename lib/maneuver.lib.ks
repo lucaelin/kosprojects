@@ -4,6 +4,12 @@
   local math is import("lib/math").
   local util is import("lib/util").
 
+  //*
+  //* escape the SOI of the body with a given excess velocity and a given angle from the prograde direction of the bodies orbits
+  //* parameter excess is the velocity to remain at SOI leave
+  //* parameter angle is the targeted angle at which to leave relative to the bodies prograde direction
+  //* TODO: this is work in progress and currently not working
+  //*
   function escape {
     parameter excess is 0.
     parameter angle is 0.
@@ -31,6 +37,12 @@
     exec(trueAnomaly, dV, 0, 0).
   }
 
+  //*
+  //* raise the orbits altitude at a given anomaly.
+  //* parameter trueAnomaly the anomaly where the burn should take place
+  //* parameter dst the altitude the orbit should have after the burn
+  //* TODO: this is work in progress and currently not working and this function does not even make any sense right now
+  //*
   function raiseAt {
     parameter trueAnomaly.
     parameter dst.
@@ -45,6 +57,11 @@
 
     exec(trueAnomaly, dV, 0, 0).
   }
+
+  //*
+  //* raise or lower the orbit at the current apoapsis
+  //* parameter dst is the desired (lowest or highest) altitude in orbit
+  //*
   function raiseAp {
     parameter dst.
 
@@ -58,6 +75,11 @@
 
     exec(0, dV, 0, 0).
   }
+
+  //*
+  //* raise or lower the orbit at the current periapsis
+  //* parameter dst is the desired (lowest or highest) altitude in orbit
+  //*
   function raisePe {
     parameter dst.
 
@@ -72,6 +94,10 @@
     exec(180, dV, 0, 0).
   }
 
+  //*
+  //* use a simple hohmann transfer to the given target. this only works if the ship and the target are in the same plane as well as in circular orbits
+  //* parameter dst the target to transfer to
+  //*
   function simpleTransfer {
     parameter dst is TARGET.
 
@@ -125,6 +151,10 @@
     exec(trueAnomaly, dV, 0, 0).
   }
 
+  //*
+  //* circularize the current orbit
+  //* parameter atPeriapsis where the maneuver should take place
+  //*
   function circularize {
     parameter atPariapsis is false.
 
@@ -148,6 +178,9 @@
     }
   }.
 
+  //*
+  //* capture from a hyperbolic orbit to a circular one at the current periapsis
+  //*
   function capture {
     parameter p is SHIP:ORBIT:PERIAPSIS.
     parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
@@ -190,6 +223,9 @@
     REMOVE maneuvernode.
   }.
 
+  //*
+  //* TODO: implement if needed
+  //*
   function tgtArgument {
     parameter tgt is TARGET.
 
@@ -197,6 +233,10 @@
     adjustInclination(tgtpe).
   }
 
+  //*
+  //* adjust the current orbits argument of periapsis
+  //* parameter tgtpe is a vector where the new periapsis should be at relative to the body
+  //*
   function adjustArgument {
     parameter tgtpe is ANGLEAXIS(45,-BODY:ANGULARVEL:NORMALIZED) * orbit["getPeriapsisVector"]().
 
@@ -228,12 +268,20 @@
     }
   }
 
+  //*
+  //* match inclination with a given target
+  //* parameter tgt the target to match inclination with
+  //*
   function tgtInclination {
     parameter tgt is TARGET.
 
     local tgtnrml is -vcrs(tgt:VELOCITY:ORBIT,BODY:POSITION-tgt:POSITION).
     adjustInclination(tgtnrml).
   }
+  //*
+  //* match inclination with a given normal vector
+  //* parameter tgtnrml the normal vector to match
+  //*
   function adjustInclination {
     parameter tgtnrml is -BODY:ANGULARVEL.
 
@@ -267,6 +315,12 @@
     //set r:VECUPDATER to { return RADIALOUT:VECTOR. }.
   }
 
+  //*
+  //* execute a maneuver at the given trueAnomaly
+  //* parameter trueAnomaly where the maneuver should take place
+  //* parameters proDV, normDV and outDV describing the maneuver
+  //* parameter warpmargin when to timewarp to prior to the start of the maneuver burn
+  //*
   function exec {
     parameter trueAnomaly.
     parameter proDV.

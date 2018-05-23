@@ -8,6 +8,12 @@
     parameter tgt is TARGET.
     return LOOKDIRUP(tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT, SHIP:FACING:TOPVECTOR).
   }
+
+  //*
+  //* Wait for the target to be as close as a given distance and then kill most of its relative speed
+  //* parameter tgt is the target to track
+  //* parameter closeDist is the distance at which the relative velocity should be killed (you need to make sure it actually gets this close)
+  //*
   function rendezvous {
     parameter tgt is TARGET.
     parameter closeDist is 5000.
@@ -28,6 +34,11 @@
     wait until (tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT):MAG < (SHIP:AVAILABLETHRUST / SHIP:MASS) / 2.
     lock THROTTLE to 0.
   }
+
+  //*
+  //* Dock to a given dockingport at the target using RCS. Steering does not consider orbital drift. Make sure the two targets are close to each other
+  //* parameter porttag look for a free port with the given tag on the target. if none is found use any other port with the correct size
+  //*
   function dock {
     parameter porttag is "".
     parameter tgt is TARGET.
@@ -83,6 +94,11 @@
 
   }
 
+  //*
+  //* Collision avoidance maneuver after manually undocking from the target. use AG10 to start the maneuver
+  //* TODO: actually implement the undock process by keeping track of the part that the vessel is actually docked to
+  //* parameter tgt is the vessel you want to move away from after undocking
+  //*
   function undock {
     parameter tgt.
     local agstate to AG10.

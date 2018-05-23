@@ -30,6 +30,10 @@
     set stagecontroller to v.
   }.
 
+  //*
+  //* wait for a launchwindow to launch into the given target normal vector
+  //* return a function that describes the required compass heading to match orbit with the targets normal
+  //*
   function awaitLaunch {
     parameter tgtnrml is -vcrs(TARGET:VELOCITY:ORBIT,BODY:POSITION-TARGET:POSITION).
 
@@ -90,6 +94,11 @@
     }.
   }
 
+  //*
+  //* Ascend vertially until a given speed is reached
+  //* parameter speed is the desired speed
+  //* parameter thrott is the throttle to use during this vertial climb
+  //*
   function verticalAscend {
     parameter speed is 100.
     parameter thrott is 1.
@@ -100,6 +109,11 @@
     wait until SHIP:VELOCITY:SURFACE:MAG > speed.
   }.
 
+  //*
+  //* Ascend profile to launch into an orbit with a given height
+  //* parameter height is the desired orbits altitude above sea level.
+  //* parameter head is a function that describes the desired heading guidance. Such a function is returned by i.e. awaitLaunch.
+  //*
   function gravitiyturn {
     parameter height is 85000.
     parameter head is {return 90.}.
@@ -110,11 +124,20 @@
     lock THROTTLE to 0.
   }.
 
+  //*
+  //* wait until the atm of the given body is completely below the ship
+  //* TODO: consider using RCS to compensate losses due to drag
+  //*
   function leaveATM {
     wait until ALTITUDE > BODY:ATM:HEIGHT. // TODO: correct drag losses
     wait 1.
   }.
 
+  //*
+  //* function that launches the craft into a parking orbit of a given altitude having a given normal vector
+  //* parameter alt is the desired parking orbits altitude
+  //* parameter tgtnormal is the normal vector the parking orbit should try to have
+  //*
   function launchTarget {
     parameter alt is 85000.
     parameter tgtnrml is -vcrs(TARGET:VELOCITY:ORBIT,BODY:POSITION-TARGET:POSITION).
@@ -132,6 +155,12 @@
     print "ASCEND COMPLETE.".
     setStagecontroller(false).
   }.
+
+  //*
+  //* function that launches the craft into a parking orbit of a given altitude
+  //* parameter alt is the desired parking orbits altitude
+  //* parameter head is a function to describe the desired compass heading during ascend
+  //*
   function launch {
     parameter alt is 85000.
     parameter head is {return 90.}.
