@@ -1,3 +1,7 @@
+//*
+//* A collection of nicetohave(tm) variables, locks and functions
+//*
+
 {
   global lock SURFACEPROGRADE to LOOKDIRUP(SHIP:VELOCITY:SURFACE, SHIP:FACING:TOPVECTOR).
   global lock SURFACERETROGRADE to LOOKDIRUP(-SHIP:VELOCITY:SURFACE, SHIP:FACING:TOPVECTOR).
@@ -47,6 +51,24 @@
     set draw:STARTUPDATER to {
       return tgt:POSITION.
     }.
+  }
+
+  global function await {
+    parameter fn.
+
+    local done is false.
+    fn:CALL({set done to true.}).
+    wait until done.
+  }
+
+  global function timeout {
+    parameter cb.
+    parameter t is 0.
+
+    local timeAtCall is TIME:SECONDS + t.
+    when TIME:SECONDS > timeAtCall then {
+      cb:CALL().
+    }
   }
 
   global function boot {

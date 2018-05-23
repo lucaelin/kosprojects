@@ -1,3 +1,7 @@
+//*
+//* base functionality for the library import and export system
+//*
+
 {
   print "  _   _   _ _  _ _____  __ ".
   print " | |_| | | | \| |_ _\ \/ / ".
@@ -27,26 +31,6 @@
     set lookup[currentImport] to lib.
   }.
 
-  function await {
-    parameter fn.
-
-    local done is false.
-    fn:CALL({set done to true.}).
-    wait until done.
-  }.
-
-  function timeout {
-    parameter cb.
-    parameter t is 0.
-
-    local timeAtCall is TIME:SECONDS + t.
-    when TIME:SECONDS > timeAtCall then {
-      cb:CALL().
-    }
-  }.
-
-    global import is import@.
-    global export is export@.
-    global await is await@.
-    global timeout is timeout@.
+  global import is import@.
+  global export is export@.
 }
