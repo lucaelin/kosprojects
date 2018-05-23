@@ -1,30 +1,32 @@
 @lazyglobal off.
 {
   function tgtPrograde {
-    return LOOKDIRUP(-(TARGET:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT), SHIP:FACING:TOPVECTOR).
+    parameter tgt is TARGET.
+    return LOOKDIRUP(-(tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT), SHIP:FACING:TOPVECTOR).
   }
   function tgtRetrograde {
-    return LOOKDIRUP(TARGET:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT, SHIP:FACING:TOPVECTOR).
+    parameter tgt is TARGET.
+    return LOOKDIRUP(tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT, SHIP:FACING:TOPVECTOR).
   }
   function rendezvous {
     parameter tgt is TARGET.
+    parameter closeDist is 5000.
 
-    lock STEERING to tgtRetrograde().
+    lock STEERING to tgtRetrograde(tgt).
 
     print "Awaiting close approach.".
+    local closeanomaly is math["trueAtRadius"](BODY:RADIUS + tgt:ORBIT:PERIAPSIS - 5000).
+    local closetime is orbit["timeToTrue"](closeanomaly).
+    KUNIVERSE:TIMEWARP:WARPTO(TIME:SECONDS + closetime).
+    wait until KUNIVERSE:TIMEWARP:ISSETTLED.
 
-    wait until tgt:POSITION:MAG < 5000.
+    wait until tgt:POSITION:MAG < closeDist.
 
     print "Killing relative velocity.".
 
     lock THROTTLE to 1.
-    wait until (tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT):MAG < (SHIP:AVAILABLETHRUST / SHIP:MASS).
+    wait until (tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT):MAG < (SHIP:AVAILABLETHRUST / SHIP:MASS) / 2.
     lock THROTTLE to 0.
-
-    RCS on.
-    set SHIP:CONTROL:FORE to 1.
-    wait until (tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT):MAG < 1.
-    set SHIP:CONTROL:FORE to 0.
   }
   function dock {
     parameter porttag is "".
@@ -47,8 +49,8 @@
         set port to p.
       }
     }
-    local tgtports is TARGET:DOCKINGPORTS:ITERATOR.
-    local tgtport is TARGET:DOCKINGPORTS[0].
+    local tgtports is tgt:DOCKINGPORTS:ITERATOR.
+    local tgtport is tgt:DOCKINGPORTS[0].
     until not tgtports:NEXT and not porttag {
       if tgtports:VALUE:NODETYPE = port:NODETYPE and tgtports:VALUE:STATE = "Ready" {
         set tgtport to tgtports:VALUE.
@@ -80,6 +82,27 @@
     print "Docked.".
 
   }
+
+  function undock {
+    parameter tgt.
+    local agstate to AG10.
+    print "Waiting for AG10.".
+    wait until AG10 <> agstate.
+    print "Undocking.".
+    wait 3.
+    RCS on.
+    lock STEERING to LOOKDIRUP(tgt:POSITION, SHIP:FACING:TOPVECTOR).
+    until tgt:POSITION:MAG > 10 {
+      steer(-tgt:POSITION, 1, tgt).
+    }
+    print "Awaiting 100m distance.".
+    until tgt:POSITION:MAG > 100 {
+      steer(-tgt:POSITION, 5, tgt).
+    }
+    RCS off.
+    print "Undock complete.".
+  }
+
   function steer {
     parameter dir is V(0, 0, 0).
     parameter maxSpeed is 0.
@@ -96,19 +119,12 @@
     set SHIP:CONTROL:TOP to VDOT(SHIP:FACING:TOPVECTOR, str).
     set SHIP:CONTROL:STARBOARD to VDOT(SHIP:FACING:STARVECTOR, str).
 
-    CLEARVECDRAWS().
-    VECDRAW(V(0,0,0), dir, white, "dir", 1, true, .2).
-    VECDRAW(V(0,0,0), str, red, "steer", 1, true, .2).
-    VECDRAW(V(0,0,0), tgtPro, red, "pro", 1, true, .2).
-    VECDRAW(V(0,0,0), SHIP:FACING:FOREVECTOR, RGBA(1,0,0,0.2), "fore", 1, true, 0.05).
-    VECDRAW(V(0,0,0), SHIP:FACING:STARVECTOR, RGBA(0,1,0,0.2), "star", 1, true, 0.05).
-    VECDRAW(V(0,0,0), SHIP:FACING:TOPVECTOR, RGBA(0,0,1,0.2), "top", 1, true, 0.05).
-
     wait 0.
   }
 
   export(lex(
     "rendezvous", rendezvous@,
-    "dock", dock@
+    "dock", dock@,
+    "undock", undock@
   )).
 }

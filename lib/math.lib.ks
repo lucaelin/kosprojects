@@ -1,5 +1,7 @@
 @lazyglobal off.
 {
+  local trigon is import("lib/trigonometry").
+
   function periodToAxis {
     parameter period.
     parameter mu is BODY:MU.
@@ -16,8 +18,7 @@
     parameter a.
     parameter b.
 
-    // TODO: correction for mutiple orbit passes.
-    if a > b {
+    until a < b {
       set a to a-360.
     }
     return b-a.
@@ -26,24 +27,23 @@
     parameter eccAnomaly.
     parameter eccentricity is SHIP:ORBIT:ECCENTRICITY.
 
-    local m is floor(eccAnomaly/360).
-    set eccAnomaly to mod(eccAnomaly, 360).
+    if eccentricity > 1 return ARCTAN(SQRT((eccentricity + 1) / (eccentricity - 1)) * trigon["tanh"](eccAnomaly / 2)) * 2.
 
-    return m * 360 + 2 * ARCTAN2(SQRT(1 + eccentricity) * SIN(eccAnomaly / 2), SQRT(1 - eccentricity) * COS(eccAnomaly / 2)).
+    local halforbits is FLOOR(trueAnomaly/180).
+    set trueAnomaly to MODMOD(trueanomaly, 360).
+    local invert is MOD(halforbits, 2) * (-2) + 1.
+    return 360 * FLOOR(halforbits/2) + MOD(invert * ARCTAN(SQRT((1 + eccentricity) / (1 - eccentricity)) * TAN(eccAnomaly / 2)) * 2 + 360, 360).
   }
   function trueToEcc {
     parameter trueAnomaly.
     parameter eccentricity is SHIP:ORBIT:ECCENTRICITY.
 
-    local eccAnom is 2 * ARCTAN(SQRT((1 - eccentricity) / (1 + eccentricity)) * TAN(trueAnomaly / 2)).
-    local m is floor(trueAnomaly/360).
-    set trueAnomaly to mod(trueAnomaly, 360).
+    if eccentricity > 1 return trigon["arcosh"]((eccentricity + COS(trueAnomaly)) / (1 + eccentricity * COS(trueAnomaly))).
 
-    // TODO: make correct for more than 180
-    if trueAnomaly > 180 {
-      return m * 360 + 360 + eccAnom.
-    }
-    return m * 360 + eccAnom.
+    local halforbits is FLOOR(trueAnomaly/180).
+    set trueAnomaly to MODMOD(trueanomaly, 360).
+    local invert is MOD(halforbits, 2) * (-2) + 1.
+    return 360 * FLOOR(halforbits/2) + MOD(invert * ARCCOS((eccentricity + COS(trueAnomaly)) / (1 + eccentricity * COS(trueAnomaly))) + 360, 360).
   }
   function eccToMean {
     parameter eccentricAnomaly.
@@ -88,13 +88,31 @@
     return a * (1 - e * COS(eAnomaly)).
   }
 
+  function trueAtRadius {
+    parameter radius.
+    parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
+    parameter e is SHIP:ORBIT:ECCENTRICITY.
+
+    return eccToTrue(eccAtRadius(radius, a, e), e).
+  }
+  function eccAtRadius {
+    parameter radius.
+    parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
+    parameter e is SHIP:ORBIT:ECCENTRICITY.
+
+    if e > 1 {
+        return trigon["arcosh"]((a - radius)/(e * a)).
+    }
+    return ARCCOS((a - radius)/(e * a)).
+  }
+
   function velAtTrue {
     parameter anomaly.
     parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
     parameter e is SHIP:ORBIT:ECCENTRICITY.
     parameter mu is BODY:MU.
 
-    return velAtRadius(radiusAtTrue(anomaly), a, mu).
+    return velAtRadius(radiusAtTrue(anomaly, a, e), a, mu).
   }
   function velAtRadius {
     parameter radius.
@@ -128,6 +146,8 @@
     "meanToTrue", meanToTrue@,
     "radiusAtTrue", radiusAtTrue@,
     "radiusAtEcc", radiusAtEcc@,
+    "trueAtRadius", trueAtRadius@,
+    "eccAtRadius", eccAtRadius@,
     "velAtTrue", velAtTrue@,
     "velAtRadius", velAtRadius@,
     "storeVector", storeVector@,

@@ -1,103 +1,116 @@
 @lazyglobal off.
 {
+  local control is import("lib/control").
+
   function land {
-    parameter vesselHeight is 5.
-    parameter maxThrottle is 0.6.
-    parameter turnspeed is 1. // change orientation in 1 second
-    parameter maxAcc is (SHIP:AVAILABLETHRUST / SHIP:MASS).
-    parameter g is (BODY:MU / BODY:RADIUS^2).
+    parameter tgt.
+    parameter vThrottle is 0.6. // use max 0.6 of the available thrust for vertical deceleration
+    parameter vesselHeight is 5. // account for the offset between the ships lowest point and its CoM
+    parameter AoA is 90. // tile the ship max 90° off its vertical position
+    parameter hThrottle is 0.5. // break horizontally with 0.5 of the maximal horizontal deceleration
+    parameter lookahead is 0.8. // predict the vessels orientation 0.8 seconds ahead to match the sterring
+    parameter bodylift is false. // invert the steering while the engines are sill deactivated
+    parameter ttiMult is 0. // multiply the tti by this value to account for atm drag
 
-    local Kp is 1.0.
-    local Ki is 0.0.
-    local Kd is 1.0.
-    local STEERPID is PIDLOOP(Kp, Ki, Kd).
-    set STEERPID:SETPOINT to 0.
+    local done is false.
 
-    //local tgt is LATLNG(8.639955, -168.237632). // VAB E
-    //local tgt is LATLNG(8.640163554, -168.176736). // PAD
-    //local tgt is TARGET.
-    local tgt is VESSEL("landingtest Probe").
-    local tgtheight is tgt:ALTITUDE.//VDOT(-SHIP:UP:VECTOR, tgt:POSITION). // TODO: make terrainheight optional in case of non target landing
-    local maxsteer is SQRT(1-maxThrottle^2)/maxThrottle * 0.9.
-    local maxsideacc is (SQRT(1-maxThrottle^2) * maxAcc).
-    local twr is maxAcc * maxThrottle / g.
+    // v controls
+    local maxAcc is (SHIP:AVAILABLETHRUST / SHIP:MASS).
+    local g is (BODY:MU / BODY:RADIUS^2).
+    local twr is maxAcc * vThrottle / g.
+    local vKp is 10.
 
-    lock THROTTLE to 0.
-    function steer {
-      parameter AoA is 180. // atm angle of attack - negative for atm coasting body lift (inverted steering)
-
-      set invert to false.
-      if AoA < 0 {
-        set invert to SIGN(AoA) < 0.
-        set AoA to ABS(AoA).
-      }
-
-      CLEARVECDRAWS().
-      CLEARSCREEN.
-      local tgtpos is tgt:POSITION.
-      local tgtvel is (VELOCITY:SURFACE/2 - SHIP:UP:VECTOR*g*twr).
-      VECDRAW(V(0,0,0), tgtpos, white, "tgt", 1, true).
-      VECDRAW(V(0,0,0), VELOCITY:SURFACE, red, "vel", 1, true).
-      local errsign is SIGN(-VDOT(SHIP:UP:VECTOR, VXCL(tgtpos:NORMALIZED, tgtvel:NORMALIZED))).
-      //set tgtvel:MAG to 100.
-      set tgtpos:MAG to tgtvel:MAG.
-      local diff is tgtpos - tgtvel.
-      set diff to VXCL(SHIP:UP:VECTOR, diff).
-      VECDRAW(V(0,0,0), diff, green, "error", 1, true).
-      VECDRAW(V(0,0,0), tgtvel, yellow, "tgtvel", 1, true).
-      local error is errsign * (diff:MAG / turnspeed / maxsideacc)^1.
-      print error at(0, 5).
-      set diff:MAG to errsign * CLAMP(-maxsteer, maxsteer, STEERPID:UPDATE(TIME:SECONDS, error)).
-      VECDRAW(V(0,0,0), diff, rgb(0,255,255), "diffpid*10", 10, true, 0.2/10).
-      print diff:MAG at(0, 6).
-      //VECDRAW(V(0,0,0), -(SHIP:UP:VECTOR - diff)*ABS(SHIP:VERTICALSPEED), blue, "steer", 1, true).
-      //VECDRAW(-(SHIP:UP:VECTOR - diff)*ABS(SHIP:VERTICALSPEED), - 2*SHIP:UP:VECTOR, white, "steer", 1, true).
-      local res is (SURFACERETROGRADE:VECTOR - diff)*ABS(SHIP:VERTICALSPEED).
-      if invert {
-        set res to res * ANGLEAXIS(180, SHIP:UP:VECTOR).
-      }
-      set res to res + maxsideacc*SHIP:UP:VECTOR. //stabilize touchdown
-
-
-
-      VECDRAW(V(0,0,0), -res, blue, "res", 1, true).
-
-      // limit AoA
-      if VANG(SURFACERETROGRADE:VECTOR, res) > AoA {
-        set res to SURFACERETROGRADE:VECTOR * ANGLEAXIS(AoA, VCRS(SURFACERETROGRADE:VECTOR, res)) * res:MAG.
-        VECDRAW(V(0,0,0), -res, white, "AoA limited", 1, true).
-      }
-
-      return LOOKDIRUP(res, SHIP:FACING:TOPVECTOR).
+    // h controls
+    local maxAoA is ARCCOS(vThrottle).
+    set AoA to MIN(AoA, maxAoA).
+    local maxSideAcc is (maxAcc * vThrottle) * TAN(AoA).
+    local hacc is maxSideAcc * hThrottle.
+    local Klimit is maxSideAcc.
+    local hKp is 10.
+    local tgtheight is 0.
+    if tgt:TYPENAME = "Vessel" {
+      set tgtheight to tgt:GEOPOSITION:TERRAINHEIGHT.
+    } else if tgt:TYPENAME = "GeoCoordinates" {
+      set tgtheight to tgt:TERRAINHEIGHT.
+    } else if tgt:TYPENAME = "String" {
+      set tgtHeight to SHIP:GEOPOSITION:TERRAINHEIGHT.
+    } else {
+      print "Unknown typename of tgt. Abort.".
+      return.
     }
+    local lock y to ALTITUDE - tgtheight - vesselHeight.
 
-    function targetSpeed {
-      parameter y is ALTITUDE - tgtheight - vesselHeight.
-      parameter maxT is maxThrottle.
-      parameter dist is 0.
-      parameter speed is 1.
+    control["vSpeed"]({
+      parameter speed is 0.1.
 
-      local acc is maxAcc * maxT - g.
+      CLEARSCREEN.
+
+      print "    distance: " + y at(0,2).
+      print "timeToImpact: " + getTimeToImpact(y) at(0,3).
+      print " impactSpeed: " + getSpeed(y) at(0,4).
+      print "burnDuration: " + getBurnDuration(vThrottle, y) at(0,5).
+      print "  timeToBurn: " + getTimeToBurn(vThrottle, y) at(0,6).
+      print "  timeToLand: " + getTimeToLand(vThrottle, y) at(0,7).
+      print "  timeAtLand: " + (TIME:SECONDS + getTimeToLand(vThrottle, y)) at(0,8).
+      print "        time: " + TIME:SECONDS at(0,9).
+
+      local acc is maxAcc * vThrottle - g.
       if acc < 0 {
         print "Error: Not enough thrust to land.".
       }
+      if SHIP:VERTICALSPEED > -speed and y < 0 {
+        control["disableVSpeed"]().
+        control["disableHSpeed"]().
+        set done to true.
+        return -speed.
+      }
 
-      return SQRT(2*acc*abs(y - dist) + speed^2).
+      local sig is -SIGN(y).
+      return sig * SQRT(2*acc*abs(MIN(y,ALT:RADAR)) - speed^2).
+    }, vKp).
+
+
+    //control["hSpeed"]({
+    //  local tgtpos is tgt:POSITION + tgt:VELOCITY:SURFACE * getTimeToLand(vThrottle).
+    //  VECDRAW(V(0,0,0), tgtpos, white, "tgt", 1, true, 0.2).
+    //  local dist is VXCL(SHIP:UP:VECTOR, tgtpos - SHIP:VELOCITY:SURFACE * lookahead).//(getTimeToLand(vThrottle))).
+    //  local tvel is SQRT(2*hacc*MAX(0,dist:MAG-4)).
+    //  local tvelLin is dist:MAG / 1.5.
+
+    //  if dist:MAG > 10 return dist:NORMALIZED * tvel.
+    //  return dist:NORMALIZED * MAX(tvel, tvelLin).
+    //}, vThrottle, lookahead, Klimit, hKp).
+    control["hSpeed"]({
+      local tgtpos is V(0,0,0).
+      if tgt:TYPENAME = "String" {
+        return BODY:POSITION.
+      } else {
+        set tgtpos to (tgt:POSITION - getBurnPosition(vThrottle, y)) + tgt:VELOCITY:SURFACE * getTimeToLand(vThrottle).
+      }
+      VECDRAW(V(0,0,0), tgtpos, white, "tgt", 1, true, 0.2).
+      local dist is VXCL(SHIP:UP:VECTOR, tgtpos - getBurnVelocity(vThrottle, y) * lookahead).
+      local tvel is SQRT(2*hacc*MAX(0,dist:MAG-4)).
+      local tvelLin is dist:MAG / 1.5.
+
+      VECDRAW(V(0,0,0), getBurnPosition(vThrottle, y), blue, "burnPos", 1, true, 1).
+      VECDRAW(V(0,0,0), getBurnVelocity(vThrottle, y), yellow, "burnVel", 1, true, 0.2).
+      VECDRAW(V(0,0,0), SHIP:VELOCITY:SURFACE, red, "vel", 1, true, 0.2).
+
+      if dist:MAG > 10 return dist:NORMALIZED * tvel.
+      return dist:NORMALIZED * MAX(tvel, tvelLin).
+    }, vThrottle, lookahead, Klimit, hKp).
+
+    if bodylift {
+      on THROTTLE {
+        control["hSpeedInvert"](THROTTLE = 0).
+        if not done {PRESERVE.}
+      }
+      control["hSpeedInvert"](THROTTLE = 0).
     }
 
-    wait until SHIP:VERTICALSPEED < 0.
-    lock STEERING to steer(-20).
-
-    wait until targetSpeed()*1.5 < -SHIP:VERTICALSPEED.
-
-    lock STEERING to steer(30*5*MAX(0,.42-SHIP:Q)).
-    // code missing
-
-    lock THROTTLE to 0.
-    lock STEERING to UPTOP.
-
-    wait 0.
+    wait until done.
   }
+
   function jebLand {
     print "Coasting to apoapsis.".
     lock STEERING to SURFACERETROGRADE.
@@ -106,7 +119,7 @@
     breakOrbit().
 
     print "Limiting speed to 100.".
-    until ALT:RADAR < 5000 {
+    until ALT:RADAR < 5000 {SQRT(2*acc*abs(y - dist) + speed^2).
       if VELOCITY:SURFACE:MAG > 100 {
         lock THROTTLE to 1.
       } else {
@@ -153,6 +166,66 @@
     wait until VELOCITY:SURFACE:MAG < 5.
     lock THROTTLE to 0.
     wait 0.
+  }
+  function getA {
+    local g is BODY:MU/BODY:RADIUS^2.
+    return g - ((SHIP:ORBIT:VELOCITY:ORBIT:SQRMAGNITUDE - SHIP:VERTICALSPEED^2)/(BODY:RADIUS)).
+  }
+  function getTimeToImpact {
+    parameter y is ALT:RADAR.
+    // x = v*t + 1/2 * a * t^2
+    // t = (-v + sqrt(v^2 + 2 * a * h))/a
+    local a is getA().
+    if y < 0 { return 0. }.
+
+    return (SHIP:VERTICALSPEED + SQRT(SHIP:VERTICALSPEED^2 + 2 * a * y)) / a.
+  }
+  function getSpeed {
+    parameter y is ALT:RADAR.
+    parameter t is getTimeToImpact(y).
+
+    local a is getA().
+
+    // v = v0 + a * t
+    return -SHIP:VERTICALSPEED + a * t.
+  }
+  function getBurnDuration {
+    parameter throt is 1.
+    parameter y is ALT:RADAR.
+
+    // gravitational acc not needed because its already in the impactSpeed
+    // (though due to the extended descend it would need to be added again by some factor)
+    local dec is throt * SHIP:AVAILABLETHRUST / SHIP:MASS.
+
+    return getSpeed(y) / dec.
+  }
+  function getTimeToLand {
+    parameter throt is 1.
+    parameter y is ALT:RADAR.
+
+    local tti is getTimeToImpact(y).
+    local ttl is tti + getBurnDuration(throt, y)/2.
+    return ttl.
+  }
+  function getTimeToBurn {
+    parameter throt is 1.
+    parameter y is ALT:RADAR.
+
+    local tti is getTimeToImpact(y).
+    local ttl is tti - getBurnDuration(throt, y)/2.
+    return ttl.
+  }
+  function getBurnPosition {
+    parameter throt is 1.
+    parameter y is ALT:RADAR.
+
+    return (SHIP:VELOCITY:SURFACE + 0.5 * getA() * (-SHIP:UP:VECTOR)) * getTimeToBurn(throt, y).
+  }
+  function getBurnVelocity {
+    parameter throt is 1.
+    parameter y is ALT:RADAR.
+
+    return SHIP:VELOCITY:SURFACE + getA() * (-SHIP:UP:VECTOR) * getTimeToBurn(throt, y).
   }
 
   export(lex(

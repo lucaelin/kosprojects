@@ -10,6 +10,13 @@
   global RADTODEG is 180/CONSTANT:PI.
   global DEGTORAD is CONSTANT:PI/180.
 
+  global function MODMOD {
+    parameter v.
+    parameter n.
+
+    return MOD(MOD(v, n) + n, n).
+  }
+
   global function CLAMP {
     parameter a.
     parameter b.
@@ -48,8 +55,10 @@
     parameter wait is true.
 
     print "Bootfile is being executed.".
+    set CONFIG:IPU to MAX(CONFIG:IPU, 1000).
 
-    RUNPATH("0:/boot/kUNIX.ks").
+    if(HOMECONNECTION:ISCONNECTED) COPYPATH("0:/boot/kUNIX.ks", "1:/boot/kUNIX.ks").
+    RUNPATH("/boot/kUNIX.ks").
 
     local initscript is type + "/" + name + ".ks".
 

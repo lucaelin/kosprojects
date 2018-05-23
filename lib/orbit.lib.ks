@@ -38,6 +38,12 @@
 
     return vec.
   }
+  function getOutVector {
+    parameter trueAnomaly.
+    parameter eccVec is getEccentricityVector().
+
+    return (eccVec + trueToVec(trueAnomaly):NORMALIZED):NORMALIZED.
+  }
 
   function vecToTrue {
     parameter vec.
@@ -121,13 +127,39 @@
     return tt.
   }
 
+  function trueAtTime {
+    parameter t.
+    parameter period is SHIP:ORBIT:PERIOD.
+    parameter currentTrue is SHIP:ORBIT:TRUEANOMALY.
+    parameter tcurr is TIME:SECONDS.
+    parameter eccentricity is SHIP:ORBIT:ECCENTRICITY.
+
+    local dt is t-tcurr.
+    local angle is dt/period * 360.
+    return math["meanToTrue"](meanAtTime(t, period, currentTrue, tcurr), eccentricity).
+  }
+  function meanAtTime {
+    parameter t.
+    parameter period is SHIP:ORBIT:PERIOD.
+    parameter currentTrue is SHIP:ORBIT:TRUEANOMALY.
+    parameter tcurr is TIME:SECONDS.
+    parameter eccentricity is SHIP:ORBIT:ECCENTRICITY.
+
+    local dt is t-tcurr.
+    local angle is dt/period * 360.
+    return math["trueToMean"](currentTrue, eccentricity) + angle.
+  }
+
   export(lex(
+    "meanAtTime", meanAtTime@,
+    "trueAtTime", trueAtTime@,
     "timeToTrue", timeToTrue@,
     "trueToVec", trueToVec@,
     "vecToTrue", vecToTrue@,
     "vecToMean", vecToMean@,
     "ascendingTrueAnomaly", ascendingTrueAnomaly@,
     "getEccentricityVector", getEccentricityVector@,
-    "getPeriapsisVector", getPeriapsisVector@
+    "getPeriapsisVector", getPeriapsisVector@,
+    "getOutVector", getOutVector@
   )).
 }

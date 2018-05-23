@@ -2,7 +2,49 @@
 {
   local orbit is import("lib/orbit").
   local math is import("lib/math").
+  local util is import("lib/util").
 
+  function escape {
+    parameter excess is 0.
+    parameter angle is 0.
+
+    local soi is BODY:SOIRADIUS.
+    print "     soi: " + soi.
+    local endSMA is 1 / (2 / soi - excess^2 / BODY:MU).
+    print "  endSMA: " + endSMA.
+
+    local r is PERIAPSIS + BODY:RADIUS.
+    print "       r: " + r.
+    local startVel is math["velAtRadius"](r).
+    print "startVel: " + startVel.
+    local endVel is math["velAtRadius"](r, endSMA).
+    print "  endVel: " + endVel.
+    local endE is (-r) / endSMA + 1.
+    print "    endE: " + endE.
+    local escEcc is math["eccAtRadius"](soi, endSMA, endE).
+    print "  escEcc: " + escEcc.
+
+    local dV is endVel-startVel.
+
+    local trueAnomaly is 0.
+
+    exec(trueAnomaly, dV, 0, 0).
+  }
+
+  function raiseAt {
+    parameter trueAnomaly.
+    parameter dst.
+
+    local r is math["radiusAtTrue"](trueAnomaly).
+
+    local ad is (BODY:RADIUS + dst + r) / 2.
+
+    local v1 is SQRT(BODY:MU*((2 / r) - (1 / SHIP:ORBIT:SEMIMAJORAXIS))).
+    local v2 is SQRT(BODY:MU*((2 / r) - (1 / ad))).
+    local dV is v2 - v1.
+
+    exec(trueAnomaly, dV, 0, 0).
+  }
   function raiseAp {
     parameter dst.
 
@@ -52,12 +94,12 @@
     } else {
       set orbits to (360-meandiff) / -catchup.
     }
-    //print "orbits " + orbits.
+    print "orbits " + orbits.
     //print "orbitsdeg " + orbits * 360.
     local startmean is mymean + orbits * 360.
     //print "startmean " + startmean.
     local trueAnomaly is math["meanToTrue"](startmean).
-    //print trueAnomaly.
+    print trueAnomaly.
 
     wait 5.
 
@@ -207,25 +249,21 @@
   }
 
   function show {
-    parameter trueAnomaly.
-    parameter proDV.
-    parameter normDV.
-    parameter inDV.
+    parameter pro.
+    parameter norm.
+    parameter out.
 
-    local out is orbit["trueToVec"](math["trueToEcc"](trueAnomaly)):NORMALIZED.
-    local norm is NORMAL:VECTOR:NORMALIZED.
-    local pro is VCRS(out, norm):NORMALIZED.
-    //CLEARVECDRAWS().
-    vecdraw(body:position + orbit["trueToVec"](trueAnomaly), pro, RGB(1,0,0), "pro", 10000, true, 1/100000).
-    vecdraw(body:position + orbit["trueToVec"](trueAnomaly), norm, RGB(1,0,1), "norm", 10000, true, 1/100000).
-    vecdraw(body:position + orbit["trueToVec"](trueAnomaly), out, RGB(0,1,1), "out", 10000, true, 1/100000).
-    vecdraw(body:position + orbit["trueToVec"](trueAnomaly), out*(inDV) + norm*normDV + pro*proDV, RGB(0,1,1), "mnvr", 1, true).
+    vecdraw(V(0, 0, 0), pro, RGB(1,0,0), "pro", 100, true, 0.5/100).
+    vecdraw(V(0, 0, 0), norm, RGB(1,0,1), "norm", 100, true, 0.5/100).
+    vecdraw(V(0, 0, 0), out, RGB(0,1,1), "out", 100, true, 0.5/100).
+    vecdraw(V(0, 0, 0), out + norm + pro, RGB(0,1,1), "mnvr", 1, true).
 
-    //global p is vecdraw(v(0,0,0), PROGRADE:VECTOR, RGBA(1,0,0,0.5), "rpro", 1, true).
+    vecdraw(v(0,0,0), PROGRADE:VECTOR, RGBA(1,0,0,0.5), "rpro", 100, true, 0.5/100).
     //set p:VECUPDATER to { return PROGRADE:VECTOR. }.
-    //global n is vecdraw(v(0,0,0), NORMAL:VECTOR, RGBA(1,0,1,0.5), "rnorm", 1, true).
+    vecdraw(v(0,0,0), NORMAL:VECTOR, RGBA(1,0,1,0.5), "rnorm", 100, true, 0.5/100).
     //set n:VECUPDATER to { return NORMAL:VECTOR. }.
-    //global r is vecdraw(v(0,0,0), RADIALOUT:VECTOR, RGBA(0,1,1,0.5), "rout", 1, true).
+    vecdraw(v(0,0,0), RADIALOUT:VECTOR, RGBA(0,1,1,0.5), "rout", 100, true, 0.5/100).
+    vecdraw(v(0,0,0), orbit["getOutVector"](SHIP:ORBIT:TRUEANOMALY), RGBA(0,0,1,0.5), "cout", 100, true, 0.5/100).
     //set r:VECUPDATER to { return RADIALOUT:VECTOR. }.
   }
 
@@ -233,61 +271,73 @@
     parameter trueAnomaly.
     parameter proDV.
     parameter normDV.
-    parameter inDV.
+    parameter outDV.
     parameter warpmargin is 20.
 
-    //show(trueAnomaly, proDV, normDV, inDV).
+    //show(trueAnomaly, proDV, normDV, outDV).
 
-    local dV is sqrt(proDV^2 + normDV^2 + inDV^2).
+    local dV is sqrt(proDV^2 + normDV^2 + outDV^2).
     local duration is burnDuration(dV).
-    local burntime is TIME:SECONDS + orbit["timeToTrue"](trueAnomaly) - duration / 2.
+    local nodetime is TIME:SECONDS + orbit["timeToTrue"](trueAnomaly).
+    local burntime is nodetime - duration / 2.
+    set trueAnomaly to MODMOD(trueAnomaly, 360).
 
     // steering calculations
-    local out is orbit["trueToVec"](math["trueToEcc"](trueAnomaly)):NORMALIZED. // using eccentric anomaly as input for trueToVec to get the correct out (because of flattening). the magnitude will be off, but normalized anyway.
-    local norm is NORMAL:VECTOR:NORMALIZED.
-    local pro is VCRS(out, norm):NORMALIZED.
+    lock STEERING to LOOKDIRUP(burnVector(trueAnomaly, proDV, normDV, outDV), SHIP:FACING:TOPVECTOR).
 
-    local burnVec is out*inDV + norm*normDV + pro*proDV.
-    local burnVecStored is math["storeVector"](burnVec).  // store the vector in relation to the SOLARPRIMEVECTOR because everything else might drift over time
-
-    lock STEERING to LOOKDIRUP(math["loadVector"](burnVecStored), SHIP:FACING:TOPVECTOR).
-
-    local maneuvernode is NODE(burntime + duration / 2, inDV, normDV, proDV).
+    local maneuvernode is NODE(nodetime, outDV, normDV, proDV).
     ADD maneuvernode.
 
+    if dV = 0 {
+      unlock THROTTLE.
+      unlock STEERING.
+      wait 1.
+      REMOVE maneuvernode.
+      return.
+    }
     wait 0.
     KUNIVERSE:TIMEWARP:WARPTO(burntime - warpmargin - 1).
     wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+    if SHIP:ORBIT:ECCENTRICITY < 0.001 { set trueAnomaly to orbit["trueAtTime"](nodetime). print "using time.". }
+    local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
+    lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
+    wait until TIME:SECONDS > burntime-1.
+    if SHIP:ORBIT:ECCENTRICITY < 0.001 { set trueAnomaly to orbit["trueAtTime"](nodetime). }
+    local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
+    lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
     wait until TIME:SECONDS > burntime.
-    if dV = 0 { return. }
 
-    // redoing steering calculations
-    set out to orbit["trueToVec"](math["trueToEcc"](trueAnomaly)):NORMALIZED. // using eccentric anomaly as input for trueToVec to get the correct out (because of flattening). the magnitude will be off, but normalized anyway.
-    set norm to NORMAL:VECTOR:NORMALIZED.
-    set pro to VCRS(out, norm):NORMALIZED.
-
-    set burnVec to out*inDV + norm*normDV + pro*proDV.
-    set burnVecStored to math["storeVector"](burnVec).  // store the vector in relation to the SOLARPRIMEVECTOR because everything else might drift over time
-
-    lock STEERING to LOOKDIRUP(math["loadVector"](burnVecStored), SHIP:FACING:TOPVECTOR).
+    if SHIP:ORBIT:ECCENTRICITY < 0.001 { set trueAnomaly to orbit["trueAtTime"](nodetime). }
+    local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
+    local something is orbit["getOutVector"](trueAnomaly):NORMALIZED.
+    //VECDRAW(V(0,0,0), something, yellow, "outVec", 1, true, 0.2).
+    local out is orbit["getOutVector"](trueAnomaly):NORMALIZED.
+    local norm is NORMAL:VECTOR:NORMALIZED.
+    local pro is VCRS(out, norm):NORMALIZED.
+    lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
 
     local dVadded is 0.
     local lastTime is TIME:SECONDS.
-    local accel is 0.
-    local dT is 0.
     local steeringoffset is 0.
     local thrustGuard is SHIP:AVAILABLETHRUST * 0.00001. // prevent NaN
     lock THROTTLE to clamp(0, 1, (dV - dVadded) / ((2*SHIP:AVAILABLETHRUST + thrustGuard)/SHIP:MASS)).
     until dVadded > dV * 0.999 {
       wait 0.
-      set dT to TIME:SECONDS - lastTime.
+      //CLEARVECDRAWS().
+      //VECDRAW(V(0,0,0), something, yellow, "outVec", 1, true, 0.2).
+      //show(pro*proDV, norm*normDV, out*outDV).
+      local dT is TIME:SECONDS - lastTime.
       set lastTime to TIME:SECONDS.
-      set accel to (SHIP:AVAILABLETHRUST * THROTTLE / SHIP:MASS).
-      set steeringoffset to VDOT(SHIP:FACING:VECTOR:NORMALIZED, STEERING:VECTOR).
-      set dVadded to dVadded + (accel * dT * steeringoffset).
+      local accel is util["getThrustVector"]() * THROTTLE / SHIP:MASS.
+      set burnVec to burnVec - accel * dT.
+      //VECDRAW(V(0,0,0), burnVec, blue, "burnVec", 1, true, 0.2).
+      //VECDRAW(burnVec, -accel, blue, "accVec", 1, true, 0.2).
+      set steeringoffset to VDOT(accel:NORMALIZED, STEERING:VECTOR:NORMALIZED).
+      set dVadded to dVadded + (accel:MAG * dT * steeringoffset).
     }
     unlock THROTTLE.
     unlock STEERING.
+    CLEARVECDRAWS().
     wait 1.
     REMOVE maneuvernode.
   }.
@@ -295,6 +345,19 @@
   function execNode {
     print "execNode is not currently supported.".
   }.
+
+  function burnVector {
+    parameter trueAnomaly.
+    parameter proDV.
+    parameter normDV.
+    parameter outDV.
+
+    local out is orbit["getOutVector"](trueAnomaly):NORMALIZED.
+    local norm is NORMAL:VECTOR:NORMALIZED.
+    local pro is VCRS(out, norm):NORMALIZED.
+
+    return out*outDV + norm*normDV + pro*proDV.
+  }
 
   function burnDuration {
     parameter dV.
@@ -321,6 +384,7 @@
   }.
 
   export(lex(
+    "escape", escape@,
     "adjustArgument", adjustArgument@,
     "tgtArgument", tgtArgument@,
     "adjustInclination", adjustInclination@,
@@ -330,6 +394,7 @@
     "simpleTransfer", simpleTransfer@,
     "raiseAp", raiseAp@,
     "raisePe", raisePe@,
+    "raiseAt", raiseAt@,
     "exec", exec@,
     "show", show@,
     "execNode", execNode@
