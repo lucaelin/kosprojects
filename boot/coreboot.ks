@@ -71,6 +71,18 @@
     }
   }
 
+  global function recvMsg {
+    wait until not CORE:MESSAGES:EMPTY.
+    return CORE:MESSAGES:POP:CONTENT.
+  }
+
+  global function awaitInput {
+    print "Press any key (or send a message) to continute...".
+    CORE:DOEVENT("Open Terminal").
+    wait until TERMINAL:INPUT:HASCHAR() or not CORE:MESSAGES:EMPTY.
+    if TERMINAL:INPUT:HASCHAR() { TERMINAL:INPUT:GETCHAR(). }
+  }
+
   global function boot {
     parameter type is "missions".
     parameter name is SHIPNAME.
@@ -85,10 +97,7 @@
     local initscript is type + "/" + name + ".ks".
 
     if wait {
-      print "Press any key (or send a message) to continute...".
-      CORE:DOEVENT("Open Terminal").
-      wait until TERMINAL:INPUT:HASCHAR() or not CORE:MESSAGES:EMPTY.
-      if TERMINAL:INPUT:HASCHAR() { TERMINAL:INPUT:GETCHAR(). }
+      awaitInput().
     }
 
     CLEARSCREEN.

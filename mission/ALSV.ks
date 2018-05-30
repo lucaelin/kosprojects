@@ -1,10 +1,23 @@
 {
-  set SHIPNAME to SHIPNAME:SPLIT(" @ ")[0].
-
   local landing is import("lib/landing").
   local maneuver is import("lib/maneuver").
   local docking is import("lib/docking").
   local orbit is import("lib/orbit").
+
+  set TARGET to VESSEL("Desire Station").
+  local lan is TARGET:ORBIT:LAN.
+  local inc is TARGET:ORBIT:INCLINATION.
+
+  local obt is LEX(
+    "LAN", lan,
+    "INC", inc
+  ).
+
+  local launcher to PROCESSOR("launcher").
+  launcher:CONNECTION:SENDMESSAGE(obt).
+
+  recvMsg().
+  set SHIPNAME to SHIPNAME:SPLIT(" @ ")[0].
 
   print "Circularizing.".
   maneuver["circularize"]().

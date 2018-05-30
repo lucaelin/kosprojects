@@ -1,17 +1,29 @@
 {
-  set SHIPNAME to SHIPNAME:SPLIT(" @ ")[0].
-
   local launch is import("lib/launch").
   local maneuver is import("lib/maneuver").
   local orbit is import("lib/orbit").
-
-  lock STEERING to PROGRADE.
 
   local lan is 66.7.
   local inc is 41.1.
   local arg is 24.9.
   local apo is 30664600.
   local peri is 23329780.
+
+  local obt is LEX(
+    "LAN", lan,
+    "INC", inc,
+    "ARG", arg,
+    "AP", apo,
+    "PE", peri
+  ).
+
+  local launcher to PROCESSOR("launcher").
+  launcher:CONNECTION:SENDMESSAGE(obt).
+
+  recvMsg().
+  set SHIPNAME to SHIPNAME:SPLIT(" @ ")[0].
+
+  lock STEERING to PROGRADE.
 
   print "Adjusting inclination.".
   local ascendingVec is ANGLEAXIS(lan, BODY:ANGULARVEL) * SOLARPRIMEVECTOR.

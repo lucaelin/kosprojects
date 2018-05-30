@@ -1,5 +1,8 @@
 @lazyglobal off.
 {
+  local math is import("lib/math").
+  local orbit is import("lib/orbit").
+
   function tgtPrograde {
     parameter tgt is TARGET.
     return LOOKDIRUP(-(tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT), SHIP:FACING:TOPVECTOR).
@@ -84,9 +87,11 @@
     print "Moving towards port.".
     until tgtport:STATE = "PreAttached" or tgtport:STATE:STARTSWITH("Docked") {
       local alignment is VXCL(tgtport:NODEPOSITION, tgtport:PORTFACING:FOREVECTOR):NORMALIZED * VANG(tgtport:NODEPOSITION, -tgtport:PORTFACING:FOREVECTOR) / 5.
-      steer(tgtport:NODEPOSITION:NORMALIZED + alignment, MIN(tgtport:NODEPOSITION:MAG/10, 1), tgt).
+      steer(tgtport:NODEPOSITION:NORMALIZED + alignment, MIN(tgtport:NODEPOSITION:MAG/20, 1), tgt).
     }
 
+    unlock STEERING.
+    SAS on.
     CLEARVECDRAWS().
     wait until tgtport:STATE:STARTSWITH("Docked").
 

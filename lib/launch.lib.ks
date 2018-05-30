@@ -49,7 +49,7 @@
 
     if VANG(-BODY:ANGULARVEL:NORMALIZED, tgtnrml) < 1 {
       print "Target is almost equatorial. Launching now.".
-      return 0.
+      return { return 90. }.
     }
 
     local meanAtLowestInc is VANG(currentHead, tgtHead).

@@ -167,7 +167,7 @@
   }
 
   //*
-  //* primitive function to kill (almost) all horizontal speed 
+  //* primitive function to kill (almost) all horizontal speed
   //*
   function breakOrbit {
     print "Breaking orbit.".
@@ -179,6 +179,24 @@
     lock THROTTLE to 0.
     wait 0.
   }
+
+  //*
+  //* primitive function to land using parachutes
+  //* does not suit any situation
+  //*
+  function parachute {
+    lock STEERING to -SHIP:VELOCITY:SURFACE.
+    wait until SHIP:ALTITUDE < SHIP:BODY:ATMHEIGHT.
+    PANELS off.
+
+    wait until SHIP:VELOCITY:SURFACE:MAG < 500 or CHUTESSAFE.
+    CHUTESSAFE on.
+    wait until SHIP:VELOCITY:SURFACE:MAG < 350.
+    CHUTES on.
+    unlock STEERING.
+    wait until SHIP:STATUS = "LANDED".
+  }
+
   function getA {
     local g is BODY:MU/BODY:RADIUS^2.
     return g - ((SHIP:ORBIT:VELOCITY:ORBIT:SQRMAGNITUDE - SHIP:VERTICALSPEED^2)/(BODY:RADIUS)).
@@ -243,6 +261,7 @@
   export(lex(
     "land", land@,
     "jebLand", jebLand@,
-    "breakOrbit", breakOrbit@
+    "breakOrbit", breakOrbit@,
+    "parachute", parachute@
   )).
 }

@@ -44,6 +44,15 @@
 
     return (eccVec + trueToVec(trueAnomaly):NORMALIZED):NORMALIZED.
   }
+  function getProVector {
+    parameter trueAnomaly.
+    parameter eccVec is getEccentricityVector().
+    parameter nrml is NORMAL:VECTOR.
+
+    local out is getOutVector(trueAnomaly, eccVec):NORMALIZED.
+    local norm is nrml:NORMALIZED.
+    return VCRS(out, norm):NORMALIZED.
+  }
 
   function vecToTrue {
     parameter vec.
@@ -87,44 +96,68 @@
     return vecToTrue(nodeDirection).
   }
 
+  function changePe {
+    parameter p is PERIAPSIS.
+    parameter r is BODY:POSITION:MAG.
+    parameter v is SHIP:VELOCITY:ORBIT:MAG.
+    parameter pathangle is 90-VANG(-BODY:POSITION,SHIP:VELOCITY:ORBIT).
+    parameter mu is BODY:MU.
+
+    print "---".
+    print p.
+    print r.
+    print v.
+    print pathangle.
+    print mu.
+    print "---".
+
+    set p to p + BODY:RADIUS.
+
+    local v1 is v.
+    print v1.
+    //local v2 is sqrt(2) * sqrt(p * mu - r * mu) / sqrt(p * r * tan(pathangle)^2 - r^3 / p + p * r).
+    local v2 is SQRT(2*mu*(1/r - 1/p) / (1 + tan(pathangle)^2-(r/p)^2)) / cos(pathangle).
+    print v2.
+
+    return v2 - v1.
+  }
+
+  function changePeAtTrue {
+    parameter p is PERIAPSIS.
+    parameter trueAnomaly is SHIP:ORBIT:TRUEANOMALY.
+
+    local r is math["radiusAtTrue"](trueAnomaly).
+    local v is math["velAtRadius"](r).
+    local pathangle is 90 - VANG(VCRS(getOutVector(trueAnomaly), NORMAL:VECTOR), trueToVec(trueAnomaly)).
+
+    return changePe(p, r, v, pathangle, BODY:MU).
+  }
+
   function timeToTrue {
     parameter anomaly.
+    parameter current is SHIP:ORBIT:TRUEANOMALY.
     parameter ecc is SHIP:ORBIT:ECCENTRICITY.
-    parameter current is SHIP:ORBIT:MEANANOMALYATEPOCH.
-    parameter p is 0.
-    parameter e is SHIP:ORBIT:ECCENTRICITY.
+    parameter sma is SHIP:ORBIT:SEMIMAJORAXIS.
 
-    if p = 0 and e >= 1 {
-      set p to ETA:PERIAPSIS * (360 / current).
-    } else {
-      set p to SHIP:ORBIT:PERIOD.
-    }
-
-    return timeToMean(math["trueToMean"](anomaly, ecc), current, p).
+    return timeToMean(math["trueToMean"](anomaly, ecc), math["trueToMean"](current, ecc), sma).
   }
 
   function timeToMean {
     parameter anomaly.
     parameter current is SHIP:ORBIT:MEANANOMALYATEPOCH.
-    parameter p is 0.
-    parameter e is SHIP:ORBIT:ECCENTRICITY.
+    parameter sma is SHIP:ORBIT:SEMIMAJORAXIS.
 
-    if p = 0 and e >= 1 {
-      set p to ETA:PERIAPSIS * (360 / current).
-    } else {
-      set p to SHIP:ORBIT:PERIOD.
-    }
+    local n is SQRT(BODY:MU / ABS(sma)^3).
 
-    if p
+    print "---".
+    print anomaly.
+    print current.
+    print anomaly - current.
+    print (anomaly - current) * DEGTORAD.
+    print n.
+    print (anomaly - current) * DEGTORAD / n.
 
-    local t is p * anomaly / 360.
-    local tt is  t - (p * current / 360).
-
-    if tt < 0 {
-      set tt to tt + p.
-    }
-
-    return tt.
+    return (anomaly - current) * DEGTORAD / n.
   }
 
   function trueAtTime {
@@ -160,6 +193,8 @@
     "ascendingTrueAnomaly", ascendingTrueAnomaly@,
     "getEccentricityVector", getEccentricityVector@,
     "getPeriapsisVector", getPeriapsisVector@,
-    "getOutVector", getOutVector@
+    "getOutVector", getOutVector@,
+    "getProVector", getProVector@,
+    "changePeAtTrue", changePeAtTrue@
   )).
 }

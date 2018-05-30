@@ -8,8 +8,10 @@
     }
   }
 
-  local lan is 66.7.
-  local inc is 41.1.
+  local tgt is recvMsg().
+
+  local lan is tgt["LAN"].
+  local inc is tgt["INC"].
   local ascendingVec is ANGLEAXIS(lan, BODY:ANGULARVEL) * SOLARPRIMEVECTOR.
   local tgtnrml is ANGLEAXIS(-inc,ascendingVec) * -BODY:ANGULARVEL.
   launch["launchTarget"](85000, tgtnrml).

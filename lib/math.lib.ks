@@ -29,8 +29,8 @@
 
     if eccentricity > 1 return ARCTAN(SQRT((eccentricity + 1) / (eccentricity - 1)) * trigon["tanh"](eccAnomaly / 2)) * 2.
 
-    local halforbits is FLOOR(trueAnomaly/180).
-    set trueAnomaly to MODMOD(trueanomaly, 360).
+    local halforbits is FLOOR(eccAnomaly/180).
+    set eccAnomaly to MODMOD(eccAnomaly, 360).
     local invert is MOD(halforbits, 2) * (-2) + 1.
     return 360 * FLOOR(halforbits/2) + MOD(invert * ARCTAN(SQRT((1 + eccentricity) / (1 - eccentricity)) * TAN(eccAnomaly / 2)) * 2 + 360, 360).
   }
@@ -49,6 +49,7 @@
     parameter eccentricAnomaly.
     parameter eccentricity is SHIP:ORBIT:ECCENTRICITY.
 
+    if eccentricity > 1 return eccentricity * trigon["sinh"](eccentricAnomaly) * RADTODEG - eccentricAnomaly.
     local m is floor(eccentricAnomaly/360).
     set eccentricAnomaly to mod(eccentricAnomaly, 360).
 

@@ -5,36 +5,61 @@
   local util is import("lib/util").
 
   //*
-  //* escape the SOI of the body with a given excess velocity and a given angle from the prograde direction of the bodies orbits
+  //* escape the SOI of the body from a circular orbit with a given excess velocity and a given angle from the prograde direction of the bodies orbits on the ship current plane
+  //* the bodies orbital prograde is projected onto the ships orbital plane, so you need to make sure that the plane is correct for your desired escape
   //* parameter excess is the velocity to remain at SOI leave
   //* parameter angle is the targeted angle at which to leave relative to the bodies prograde direction
-  //* TODO: this is work in progress and currently not working
   //*
   function escape {
     parameter excess is 0.
     parameter angle is 0.
 
     local soi is BODY:SOIRADIUS.
-    print "     soi: " + soi.
+    //print "     soi: " + soi.
     local endSMA is 1 / (2 / soi - excess^2 / BODY:MU).
-    print "  endSMA: " + endSMA.
+    //print "  endSMA: " + endSMA.
 
     local r is PERIAPSIS + BODY:RADIUS.
-    print "       r: " + r.
+    //print "       r: " + r.
     local startVel is math["velAtRadius"](r).
-    print "startVel: " + startVel.
+    //print "startVel: " + startVel.
     local endVel is math["velAtRadius"](r, endSMA).
-    print "  endVel: " + endVel.
+    //print "  endVel: " + endVel.
     local endE is (-r) / endSMA + 1.
-    print "    endE: " + endE.
-    local escEcc is math["eccAtRadius"](soi, endSMA, endE).
-    print "  escEcc: " + escEcc.
+    //print "    endE: " + endE.
+    local escAno is math["trueAtRadius"](soi, endSMA, endE).
+    //print "  escAno: " + escAno.
+    local escEVec is orbit["getEccentricityVector"]():NORMALIZED * endE. // assume to keep the current periapsis position after burn
+    local escProVec is VCRS(orbit["getOutVector"](escAno, escEVec), NORMAL:VECTOR):NORMALIZED.
+
+    CLEARVECDRAWS().
+    local escTime is orbit["timeToTrue"](escAno, 0, endE, endSMA).
+    //print " escTime: " + escTime.
+    local escBodyTrue is orbit["trueAtTime"](
+      escTime,
+      SHIP:BODY:ORBIT:PERIOD,
+      SHIP:BODY:ORBIT:TRUEANOMALY,
+      0,
+      SHIP:BODY:ORBIT:ECCENTRICITY
+    ).
+    //print "   bodyTrue: " + SHIP:BODY:ORBIT:TRUEANOMALY.
+    //print "escbodyTrue: " + escBodyTrue.
+    local bodyPos is SHIP:BODY:POSITION - SHIP:BODY:BODY:POSITION.
+    local bodyEccVec is orbit["getEccentricityVector"](SHIP:BODY:ORBIT:VELOCITY:ORBIT, bodyPos, SHIP:BODY:BODY:MU).
+    local bodyNrml is VCRS(SHIP:BODY:ORBIT:VELOCITY:ORBIT, bodyPos).
+    local escBodyPrograde is orbit["getProVector"](escBodyTrue, bodyEccVec, bodyNrml).
+
+    local escAngle is orbit["vecToTrue"](escProVec, escBodyPrograde).
+    //print "escAngle: " + escAngle.
 
     local dV is endVel-startVel.
 
-    local trueAnomaly is 0.
+    local trueAnomaly is angle - escAngle.
+    exec(trueAnomaly+360, dV, 0, 0).
 
-    exec(trueAnomaly, dV, 0, 0).
+    local oldbody is SHIP:BODY.
+    wait until not SHIP:BODY = oldbody.
+    wait 1.
   }
 
   //*
@@ -56,6 +81,20 @@
     local dV is v2 - v1.
 
     exec(trueAnomaly, dV, 0, 0).
+  }
+
+  //*
+  //* change the periapsis altitude at a given anomaly.
+  //* parameter trueAnomaly the anomaly where the burn should take place
+  //* parameter p the altitude of the desired periapsis
+  //*
+  function changePe {
+    parameter trueAnomaly.
+    parameter p.
+
+    local dv is orbit["changePeAtTrue"](p, trueAnomaly).
+
+    exec(trueAnomaly, dv, 0, 0, SHIP:ORBIT:PERIOD).
   }
 
   //*
@@ -329,6 +368,7 @@
     parameter warpmargin is 20.
 
     //show(trueAnomaly, proDV, normDV, outDV).
+    if trueAnomaly < SHIP:ORBIT:TRUEANOMALY set trueAnomaly to trueAnomaly + 360.
 
     local dV is sqrt(proDV^2 + normDV^2 + outDV^2).
     local duration is burnDuration(dV).
@@ -352,19 +392,17 @@
     wait 0.
     KUNIVERSE:TIMEWARP:WARPTO(burntime - warpmargin - 1).
     wait until KUNIVERSE:TIMEWARP:ISSETTLED.
-    if SHIP:ORBIT:ECCENTRICITY < 0.001 { set trueAnomaly to orbit["trueAtTime"](nodetime). print "using time.". }
+    if SHIP:ORBIT:ECCENTRICITY < 0.001 set trueAnomaly to orbit["trueAtTime"](nodetime).
     local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
     lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
     wait until TIME:SECONDS > burntime-1.
-    if SHIP:ORBIT:ECCENTRICITY < 0.001 { set trueAnomaly to orbit["trueAtTime"](nodetime). }
+    if SHIP:ORBIT:ECCENTRICITY < 0.001 set trueAnomaly to orbit["trueAtTime"](nodetime).
     local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
     lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
     wait until TIME:SECONDS > burntime.
 
     if SHIP:ORBIT:ECCENTRICITY < 0.001 { set trueAnomaly to orbit["trueAtTime"](nodetime). }
     local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
-    local something is orbit["getOutVector"](trueAnomaly):NORMALIZED.
-    //VECDRAW(V(0,0,0), something, yellow, "outVec", 1, true, 0.2).
     local out is orbit["getOutVector"](trueAnomaly):NORMALIZED.
     local norm is NORMAL:VECTOR:NORMALIZED.
     local pro is VCRS(out, norm):NORMALIZED.
@@ -378,7 +416,6 @@
     until dVadded > dV * 0.999 {
       wait 0.
       //CLEARVECDRAWS().
-      //VECDRAW(V(0,0,0), something, yellow, "outVec", 1, true, 0.2).
       //show(pro*proDV, norm*normDV, out*outDV).
       local dT is TIME:SECONDS - lastTime.
       set lastTime to TIME:SECONDS.
@@ -449,6 +486,7 @@
     "raiseAp", raiseAp@,
     "raisePe", raisePe@,
     "raiseAt", raiseAt@,
+    "changePe", changePe@,
     "exec", exec@,
     "show", show@,
     "execNode", execNode@
