@@ -125,16 +125,15 @@
 
   function storeVector {
     parameter vec.
-    return lex(
-      "dir", ROTATEFROMTO(SOLARPRIMEVECTOR, vec),
-      "mag", vec:MAG
-    ).
+    parameter spv is SOLARPRIMEVECTOR.
+
+    return V( vec:x * spv:x + vec:z * spv:z, vec:z * spv:x - vec:x * spv:z, vec:y).
   }
   function loadVector {
     parameter p.
-    local vec is p["dir"]*SOLARPRIMEVECTOR.
-    set vec:MAG to p["mag"].
-    return vec.
+    parameter spv is SOLARPRIMEVECTOR.
+
+    return V( p:x * spv:x - p:y * spv:z, p:z, p:x * spv:z + p:y * spv:x ).
   }
 
   export(lex(

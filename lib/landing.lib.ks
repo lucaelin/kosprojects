@@ -1,6 +1,8 @@
 @lazyglobal off.
 {
   local control is import("lib/control").
+  local math is import("lib/math").
+  local orbit is import("lib/orbit").
 
   //*
   //* function to propulsively land at a given place.
@@ -185,16 +187,45 @@
   //* does not suit any situation
   //*
   function parachute {
-    lock STEERING to -SHIP:VELOCITY:SURFACE.
-    wait until SHIP:ALTITUDE < SHIP:BODY:ATMHEIGHT.
+    parameter stagenr is 0.
+    parameter chutedub is "chute".
+
+    lock STEERING to RADIALIN.
+    local warptime is TIME:SECONDS + orbit["timeToTrue"](360-math["trueAtRadius"](BODY:RADIUS + BODY:ATM:HEIGHT * 1.5)).
+    KUNIVERSE:TIMEWARP:WARPTO(warptime).
+    wait until TIME:SECONDS > warptime.
+    wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+
+    wait 5.
+
+    until STAGE:NUMBER = stagenr {
+      wait until STAGE:READY.
+      stage.
+      wait 1.
+    }
     PANELS off.
 
-    wait until SHIP:VELOCITY:SURFACE:MAG < 500 or CHUTESSAFE.
-    CHUTESSAFE on.
-    wait until SHIP:VELOCITY:SURFACE:MAG < 350.
-    CHUTES on.
+
+    wait until SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT.
+    lock STEERING to SURFACERETROGRADE.
+
+    wait until SHIP:VELOCITY:SURFACE:MAG < 1000.
+    for p in SHIP:PARTS {
+      for m in p:MODULES {
+        if m:TOLOWER:CONTAINS(chutedub) {
+          set m to p:GETMODULE(m).
+          for a in m:ALLACTIONNAMES {
+            if a:TOLOWER:CONTAINS("arm") and not a:TOLOWER:CONTAINS("disarm") {
+              print a.
+              m:DOACTION(a, true).
+            }
+          }
+        }
+      }
+    }
+    wait until SHIP:VELOCITY:SURFACE:MAG < 200.
     unlock STEERING.
-    wait until SHIP:STATUS = "LANDED".
+    wait until SHIP:STATUS = "LANDED" or SHIP:STATUS = "SPLASHED".
   }
 
   function getA {

@@ -1,7 +1,7 @@
 {
   local launch is import("lib/launch").
 
-  when ALTITUDE > 55000 THEN {
+  when ALTITUDE > BODY:ATM:HEIGHT/2 and SHIP:Q < 0.01 THEN {
     TOGGLE AG1.
     when ALTITUDE > 70000 THEN {
       TOGGLE AG2.

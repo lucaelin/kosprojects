@@ -4,6 +4,7 @@
   local maneuver is import("lib/maneuver").
   local docking is import("lib/docking").
   local orbit is import("lib/orbit").
+  local math is import("lib/math").
 
   set TARGET to BODY("Iota").
   local lan is TARGET:ORBIT:LAN.
@@ -41,7 +42,7 @@
 
   lock STEERING to RADIALIN.
   wait 10.
-  until STAGE:NUMBER = 1 {
+  until STAGE:NUMBER = 2 {
     wait until STAGE:READY.
     stage.
     wait 1.
@@ -65,7 +66,7 @@
     wait until PERIAPSIS < 20000.
     lock THROTTLE to 0.
   }
-  lock STEERING to PROGRADE.
+  lock STEERING to RADIALOUT.
   wait 10.
   lock THROTTLE to 1.
   wait until PERIAPSIS > 0.
@@ -81,13 +82,18 @@
   maneuver["circularize"]().
 
   awaitInput().
+  
+  local parent is SHIP:BODY:BODY.
+  local newPeri is parent:ATM:HEIGHT/2.
+  local newSMA is (SHIP:BODY:ALTITUDE + newPeri) / 2 + parent:RADIUS.
+  local newVel is math["velAtRadius"](SHIP:BODY:ALTITUDE + parent:RADIUS, newSMA, parent:MU).
+  maneuver["escape"](SHIP:BODY:ORBIT:VELOCITY:ORBIT:MAG-newVel, 180).
+  wait 1.
 
-  maneuver["escape"](180, 300).
-
-  maneuver["changePe"](math["meanToTrue"](270), BODY:ATMHEIGHT/2).
+  maneuver["changePe"](360-math["eccToTrue"](135), newPeri).
 
   wait 1.
   print BODY:NAME + " landing.".
-  landing["parachute"]().
+  landing["parachute"](1).
   TOGGLE AG4.
 }

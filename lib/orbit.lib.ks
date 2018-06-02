@@ -41,17 +41,37 @@
   function getOutVector {
     parameter trueAnomaly.
     parameter eccVec is getEccentricityVector().
+    parameter nrml is NORMAL:VECTOR:NORMALIZED.
+    parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
 
-    return (eccVec + trueToVec(trueAnomaly):NORMALIZED):NORMALIZED.
+    if eccVec:MAG = 0 {
+      print "eccentricityVector should not be 0!".
+    }
+
+    return (eccVec + trueToVec(trueAnomaly, eccVec, nrml, a, eccVec:MAG):NORMALIZED):NORMALIZED. // TODO if this works trueToVec works with eccVec
   }
   function getProVector {
     parameter trueAnomaly.
     parameter eccVec is getEccentricityVector().
     parameter nrml is NORMAL:VECTOR.
+    parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
 
-    local out is getOutVector(trueAnomaly, eccVec):NORMALIZED.
+    if eccVec:MAG = 0 {
+      print "eccentricityVector should not be 0!".
+    }
+
+    local out is getOutVector(trueAnomaly, eccVec, nrml, a):NORMALIZED.
     local norm is nrml:NORMALIZED.
     return VCRS(out, norm):NORMALIZED.
+  }
+  function getVelVector {
+    parameter trueAnomaly.
+    parameter eccVec is getEccentricityVector().
+    parameter nrml is NORMAL:VECTOR.
+    parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
+    parameter mu is BODY:MU.
+
+    return getProVector(trueAnomaly, eccVec, nrml, a) * math["velAtTrue"](trueAnomaly, a, eccVec:MAG, mu).
   }
 
   function vecToTrue {
@@ -76,7 +96,7 @@
 
   function trueToVec {
     parameter trueAnomaly.
-    parameter pe is getPeriapsisVector().
+    parameter pe is getPeriapsisVector(). //TODO might also work using the eccentricityVector
     parameter normVec is NORMAL:VECTOR:NORMALIZED.
     parameter a is SHIP:ORBIT:SEMIMAJORAXIS.
     parameter e is SHIP:ORBIT:ECCENTRICITY.
@@ -149,14 +169,6 @@
 
     local n is SQRT(BODY:MU / ABS(sma)^3).
 
-    print "---".
-    print anomaly.
-    print current.
-    print anomaly - current.
-    print (anomaly - current) * DEGTORAD.
-    print n.
-    print (anomaly - current) * DEGTORAD / n.
-
     return (anomaly - current) * DEGTORAD / n.
   }
 
@@ -195,6 +207,7 @@
     "getPeriapsisVector", getPeriapsisVector@,
     "getOutVector", getOutVector@,
     "getProVector", getProVector@,
+    "getVelVector", getVelVector@,
     "changePeAtTrue", changePeAtTrue@
   )).
 }

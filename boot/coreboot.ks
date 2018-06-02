@@ -77,6 +77,9 @@
   }
 
   global function awaitInput {
+    until not TERMINAL:INPUT:HASCHAR() {
+      TERMINAL:INPUT:GETCHAR().
+    }.
     print "Press any key (or send a message) to continute...".
     CORE:DOEVENT("Open Terminal").
     wait until TERMINAL:INPUT:HASCHAR() or not CORE:MESSAGES:EMPTY.
@@ -101,7 +104,8 @@
     }
 
     CLEARSCREEN.
-    COPYPATH("0:/"+initscript, initscript).
+    if(HOMECONNECTION:ISCONNECTED) COPYPATH("0:/"+initscript, initscript).
+    else print "Unable to update... using local script.".
 
     if wait {
       print "Running InitScript in".

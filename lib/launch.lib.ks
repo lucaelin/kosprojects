@@ -12,6 +12,8 @@
         set stagecontroller to false.
 
         timeout({
+          print "Stagecontroller event staging.".
+          print e.
           STAGE.
           timeout({
             LIST ENGINES IN enginelist.
@@ -27,6 +29,7 @@
 
   function setStagecontroller {
     parameter v is true.
+    LIST ENGINES IN enginelist.
     set stagecontroller to v.
   }.
 
@@ -86,11 +89,8 @@
       local tgtinc is VANG(-BODY:ANGULARVEL, tgtnrml).
       local diff is tgtinc - myinc.
       local lng is 180-ARCSIN(MIN(SHIP:GEOPOSITION:LAT/tgtinc, 1)).
-      if diff > 90 {
-        set diff to diff - 180.
-        print "TODO: test".
-      }
-      return 90 - tgtinc*COS(lng) + diff.
+
+      return MAX(90 - tgtinc*COS(lng) + diff, -90).
     }.
   }
 

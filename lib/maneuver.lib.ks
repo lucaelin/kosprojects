@@ -47,18 +47,28 @@
     local bodyPos is SHIP:BODY:POSITION - SHIP:BODY:BODY:POSITION.
     local bodyEccVec is orbit["getEccentricityVector"](SHIP:BODY:ORBIT:VELOCITY:ORBIT, bodyPos, SHIP:BODY:BODY:MU).
     local bodyNrml is VCRS(SHIP:BODY:ORBIT:VELOCITY:ORBIT, bodyPos).
-    local escBodyPrograde is orbit["getProVector"](escBodyTrue, bodyEccVec, bodyNrml).
+    local escBodyPrograde is orbit["getProVector"](escBodyTrue, bodyEccVec, bodyNrml, BODY:ORBIT:SEMIMAJORAXIS).
+    if escBodyPrograde:MAG = 0 {
+      // body is perfectly circular
+      print "Body is perfectly circular...".
+      set escBodyPrograde to ANGLEAXIS(escBodyTrue - SHIP:BODY:ORBIT:TRUEANOMALY, -bodyNrml) * SHIP:BODY:ORBIT:VELOCITY:ORBIT.
+    }
 
     local escAngle is orbit["vecToTrue"](escProVec, escBodyPrograde).
-    //print "escAngle: " + escAngle.
 
     local dV is endVel-startVel.
 
     local trueAnomaly is angle - escAngle.
     exec(trueAnomaly+360, dV, 0, 0).
+    print "Escape burn complete.".
 
     local oldbody is SHIP:BODY.
-    wait until not SHIP:BODY = oldbody.
+    wait 1.
+    local warptime is TIME:SECONDS + escTime + 10.
+    KUNIVERSE:TIMEWARP:WARPTO(warptime).
+    wait until TIME:SECONDS > warptime.
+    wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+    wait until not (SHIP:BODY = oldbody).
     wait 1.
   }
 
@@ -94,7 +104,7 @@
 
     local dv is orbit["changePeAtTrue"](p, trueAnomaly).
 
-    exec(trueAnomaly, dv, 0, 0, SHIP:ORBIT:PERIOD).
+    exec(trueAnomaly, dv, 0, 0).
   }
 
   //*
@@ -376,61 +386,90 @@
     local burntime is nodetime - duration / 2.
     set trueAnomaly to MODMOD(trueAnomaly, 360).
 
-    // steering calculations
-    lock STEERING to LOOKDIRUP(burnVector(trueAnomaly, proDV, normDV, outDV), SHIP:FACING:TOPVECTOR).
-
-    local maneuvernode is NODE(nodetime, outDV, normDV, proDV).
-    ADD maneuvernode.
-
     if dV = 0 {
       unlock THROTTLE.
       unlock STEERING.
-      wait 1.
-      REMOVE maneuvernode.
+      wait 0.
       return.
     }
-    wait 0.
+
+    local maneuvernode is "".
+    if CAREER():CANMAKENODES {
+      set maneuvernode to NODE(nodetime, outDV, normDV, proDV).
+      ADD maneuvernode.
+    }
+
+    local mnvPos is orbit["trueToVec"](trueAnomaly).
+    local mnvPosStored is math["storeVector"](mnvPos).
+    local mnvVel is burnVector(trueAnomaly, proDV + math["velAtTrue"](trueAnomaly), normDV, outDV).
+    local mnvVelStored is math["storeVector"](mnvVel).
+    local mnvEcc is -orbit["getEccentricityVector"](mnvVel, mnvPos, BODY:MU). // TODO find out why negative?!
+    local mnvEccStored is math["storeVector"](mnvEcc).
+    local mnvNrml is -VCRS(mnvPos, mnvVel):NORMALIZED.
+    local mnvNrmlStored is math["storeVector"](mnvNrml).
+    local mnvSMA is 1 / (2 / mnvPos:MAG - mnvVel:MAG^2 / BODY:MU).
+
+    //local lock curMnvTrue to orbit["vecToTrue"](-BODY:POSITION, math["loadVector"](mnvEccStored), math["loadVector"](mnvNrmlStored)).
+    local lock curMnvTrue to orbit["vecToTrue"](math["loadVector"](mnvPosStored)).
+    //local lock curMnvVel to orbit["getVelVector"](
+    //  curMnvTrue,
+    //  math["loadVector"](mnvEccStored),
+    //  math["loadVector"](mnvNrmlStored),
+    //  mnvSMA,
+    //  BODY:MU
+    //).
+    local lock curMnvVel to orbit["getVelVector"](curMnvTrue).
+    //local lock diff to curMnvVel - SHIP:VELOCITY:ORBIT.
+    local lock diff to math["loadVector"](mnvVelStored) - curMnvVel.
+    lock STEERING to LOOKDIRUP(diff, SHIP:FACING:TOPVECTOR).
+
+    local done is false.
+    on TIME:SECONDS {
+      return.
+      CLEARVECDRAWS().
+      CLEARSCREEN.
+      print "curMnvTrue:" + curMnvTrue.
+      print "    mnvSMA:" + mnvSMA.
+      print "     hdiff:" + (math["radiusAtTrue"](curMnvTrue) - math["loadVector"](mnvPosStored):MAG).
+      print "     vdiff:" + diff:MAG.
+
+      VECDRAW(BODY:POSITION, math["loadVector"](mnvPosStored), rgb(255,200,0), "mnvPos", 1, true).
+      VECDRAW(V(0,0,0), diff, white, "diff", 1, true).
+      VECDRAW(V(0,0,0), curMnvVel, blue, "curMnvVel", 1, true).
+      VECDRAW(V(0,0,0), SHIP:VELOCITY:ORBIT, red, "vel", 1, true).
+      VECDRAW(V(0,0,0), math["loadVector"](mnvVelStored), purple, "mnvVel", 1, true).
+      VECDRAW(V(0,10,0), math["loadVector"](mnvEccStored):NORMALIZED, white, "Ecc", 1, true).
+      VECDRAW(V(0,10,0), math["loadVector"](mnvNrmlStored):NORMALIZED, yellow, "Nrml", 1, true).
+      if not done PRESERVE.
+    }
     KUNIVERSE:TIMEWARP:WARPTO(burntime - warpmargin - 1).
     wait until KUNIVERSE:TIMEWARP:ISSETTLED.
-    if SHIP:ORBIT:ECCENTRICITY < 0.001 set trueAnomaly to orbit["trueAtTime"](nodetime).
-    local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
-    lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
-    wait until TIME:SECONDS > burntime-1.
-    if SHIP:ORBIT:ECCENTRICITY < 0.001 set trueAnomaly to orbit["trueAtTime"](nodetime).
-    local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
-    lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
     wait until TIME:SECONDS > burntime.
 
-    if SHIP:ORBIT:ECCENTRICITY < 0.001 { set trueAnomaly to orbit["trueAtTime"](nodetime). }
-    local burnVec is burnVector(trueAnomaly, proDV, normDV, outDV).
-    local out is orbit["getOutVector"](trueAnomaly):NORMALIZED.
-    local norm is NORMAL:VECTOR:NORMALIZED.
-    local pro is VCRS(out, norm):NORMALIZED.
-    lock STEERING to LOOKDIRUP(burnVec, SHIP:FACING:TOPVECTOR).
-
-    local dVadded is 0.
-    local lastTime is TIME:SECONDS.
-    local steeringoffset is 0.
-    local thrustGuard is SHIP:AVAILABLETHRUST * 0.00001. // prevent NaN
-    lock THROTTLE to clamp(0, 1, (dV - dVadded) / ((2*SHIP:AVAILABLETHRUST + thrustGuard)/SHIP:MASS)).
-    until dVadded > dV * 0.999 {
-      wait 0.
-      //CLEARVECDRAWS().
-      //show(pro*proDV, norm*normDV, out*outDV).
-      local dT is TIME:SECONDS - lastTime.
-      set lastTime to TIME:SECONDS.
-      local accel is util["getThrustVector"]() * THROTTLE / SHIP:MASS.
-      set burnVec to burnVec - accel * dT.
-      //VECDRAW(V(0,0,0), burnVec, blue, "burnVec", 1, true, 0.2).
-      //VECDRAW(burnVec, -accel, blue, "accVec", 1, true, 0.2).
-      set steeringoffset to VDOT(accel:NORMALIZED, STEERING:VECTOR:NORMALIZED).
-      set dVadded to dVadded + (accel:MAG * dT * steeringoffset).
+    local lock acc to (SHIP:AVAILABLETHRUST+SHIP:MASS*0.00001) / SHIP:MASS.
+    if CAREER():CANMAKENODES {
+      lock STEERING to LOOKDIRUP(maneuvernode:BURNVECTOR, SHIP:FACING:TOPVECTOR).
+      lock THROTTLE to CLAMP(0.01, 1, maneuvernode:BURNVECTOR:MAG / (acc * 2)).
+      wait until maneuvernode:BURNVECTOR:MAG < SHIP:MAXTHRUST / SHIP:MASS * 0.01 or VANG(maneuvernode:BURNVECTOR, util["getThrustVector"]()) > 90.
+    } else {
+      lock STEERING to LOOKDIRUP(diff, SHIP:FACING:TOPVECTOR).
+      lock THROTTLE to CLAMP(0.01, 1, diff:MAG / (acc * 2)).
+      wait until diff:MAG < SHIP:MAXTHRUST / SHIP:MASS * 0.01 or VANG(diff, util["getThrustVector"]()) > 90.
     }
+    lock THROTTLE to 0.
+
     unlock THROTTLE.
     unlock STEERING.
+    //awaitInput().
+
+    set done to true.
     CLEARVECDRAWS().
+
     wait 1.
-    REMOVE maneuvernode.
+    if CAREER():CANMAKENODES {
+      REMOVE maneuvernode.
+    }
+    wait 0.
   }.
 
   function execNode {
