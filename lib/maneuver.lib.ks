@@ -3,6 +3,7 @@
   local orbit is import("lib/orbit").
   local math is import("lib/math").
   local util is import("lib/util").
+  local gui is import("lib/gui").
 
   //*
   //* escape the SOI of the body from a circular orbit with a given excess velocity and a given angle from the prograde direction of the bodies orbits on the ship current plane
@@ -149,55 +150,111 @@
   //*
   function simpleTransfer {
     parameter dst is TARGET.
+    parameter src is SHIP.
 
-    local s is SHIP:ORBIT:SEMIMAJORAXIS.
+    local s is src:ORBIT:SEMIMAJORAXIS.
     local d is dst:ORBIT:SEMIMAJORAXIS.
     local h is (s+d)/2.
     local p is 1 / (2 * SQRT(d^3 / h^3)) - 0.5.
+
+    local srcVel is src:ORBIT:VELOCITY:ORBIT.
+    wait 0.
+    local srcBodyPos is src:BODY:POSITION - src:POSITION.
+    local srcPe is orbit["getPeriapsisVector"](
+      srcVel,    // velocity vector
+      -srcBodyPos,    // position vector
+      src:BODY:MU,
+      src:BODY:RADIUS + src:ORBIT:PERIAPSIS
+    ).
+    local srcNormVec is VCRS(srcVel, -srcBodyPos).
+
     //print "transferangle " + p*360.
-    local dstmean is orbit["vecToMean"](dst:ORBIT:POSITION-BODY:POSITION) + p * 360.
-    //print "dstmean " + dstmean.
-    local mymean is SHIP:ORBIT:MEANANOMALYATEPOCH.
-    //print "mymean " + mymean.
+    local dstmean is orbit["vecToMean"](dst:POSITION - src:POSITION - srcBodyPos, src:ORBIT:ECCENTRICITY, srcPe, srcNormVec) + p * 360.
+    print "dstmean " + dstmean.
+    local mymean is orbit["vecToMean"](-srcBodyPos, src:ORBIT:ECCENTRICITY, srcPe, srcNormVec).
+    print "mymean " + mymean.
     local meandiff is math["diffAnomaly"](mymean, dstmean).
-    //print "diff " + meandiff.
-    local catchup is math["orbitalPhasing"](SHIP:ORBIT:PERIOD, dst:ORBIT:PERIOD).
-    //print "catchup " + catchup.
+    print "diff " + meandiff.
+    local catchup is math["orbitalPhasing"](src:ORBIT:PERIOD, dst:ORBIT:PERIOD).
+    print "catchup " + catchup.
     local orbits is 0.
     if catchup > 0  {
       set orbits to meandiff / catchup.
     } else {
       set orbits to (360-meandiff) / -catchup.
     }
-    print "orbits " + orbits.
+    print "orbits " + orbits + "("+(orbits*src:ORBIT:PERIOD/60/60)+"h)".
     //print "orbitsdeg " + orbits * 360.
     local startmean is mymean + orbits * 360.
-    //print "startmean " + startmean.
-    local trueAnomaly is math["meanToTrue"](startmean).
-    print trueAnomaly.
+    print "startmean " + startmean.
+    local trueAnomaly is math["meanToTrue"](startmean, src:ORBIT:ECCENTRICITY).
+    print "trueAnomaly " + trueAnomaly.
 
-    wait 5.
+    wait 0.
 
-    local pos is orbit["trueToVec"](trueAnomaly).
+    local pos is orbit["trueToVec"](trueAnomaly, srcPe, srcNormVec, src:ORBIT:SEMIMAJORAXIS, src:ORBIT:ECCENTRICITY).
+
+    // CLEARVECDRAWS().
+    // VECDRAW(src:POSITION, srcBodyPos, yellow, "srcBodyPos", 1, true).
+    // VECDRAW(src:BODY:POSITION, pos, white, "pos", 1, true).
+    // VECDRAW(src:POSITION, srcBodyPos, yellow, "srcBodyPos", 1, true).
+    // VECDRAW(src:BODY:POSITION, srcPe, green, "srcPe", 1, true).
+    // VECDRAW(src:BODY:POSITION, srcNormVec:NORMALIZED * srcPe:MAG, red, "srcNormVec", 1, true).
+    // awaitInput().
+    // CLEARVECDRAWS().
+
+    wait 0.
     local dstDir is -pos.
     local dstPe is orbit["getPeriapsisVector"](
-      dst:VELOCITY:ORBIT,
-      dst:ORBIT:POSITION - BODY:POSITION,
-      BODY:MU,
-      BODY:RADIUS + dst:PERIAPSIS
+      dst:ORBIT:VELOCITY:ORBIT,
+      dst:ORBIT:POSITION - src:POSITION - srcBodyPos,
+      src:BODY:MU,
+      src:BODY:RADIUS + dst:ORBIT:PERIAPSIS
     ).
-    local dstTrue is orbit["vecToTrue"](dstDir, dstPe, -vcrs(dst:VELOCITY:ORBIT, dst:ORBIT:POSITION - BODY:POSITION)).
+    local dstTrue is orbit["vecToTrue"](dstDir, dstPe, -vcrs(dst:ORBIT:VELOCITY:ORBIT, dst:ORBIT:POSITION - src:POSITION - srcBodyPos)).
     local dstAlt is math["radiusAtTrue"](dstTrue, dst:ORBIT:SEMIMAJORAXIS, dst:ORBIT:ECCENTRICITY).
 
-    local norm is NORMAL:VECTOR:NORMALIZED.
-    local pro is VCRS(pos, norm).
-    set pro:MAG to math["velAtRadius"](pos:MAG).
+    local pro is VCRS(pos, srcNormVec).
+    set pro:MAG to math["velAtRadius"](pos:MAG, src:ORBIT:SEMIMAJORAXIS, src:BODY:MU).
     local cosy is VCRS(pos, pro):MAG / (pos:MAG * pro:MAG).
-    local dV is SQRT((2 * BODY:MU * dstAlt * (dstAlt - pos:MAG)) / (pos:MAG * dstAlt ^ 2 - pos:MAG ^ 3 * cosy ^ 2)) - pro:MAG.
+    local dV is SQRT((2 * src:BODY:MU * dstAlt * (dstAlt - pos:MAG)) / (pos:MAG * dstAlt ^ 2 - pos:MAG ^ 3 * cosy ^ 2)) - pro:MAG.
 
     print "deltaV: " + dV.
 
-    exec(trueAnomaly, dV, 0, 0).
+    if trueAnomaly < 0 {
+      print "soeting waent worng".
+      return.
+    }
+
+    if src = SHIP {
+      exec(trueAnomaly, dV, 0, 0).
+    } else if src = SHIP:BODY {
+      local dt is orbits * src:ORBIT:PERIOD.
+      local t is TIME:SECONDS + dt.
+      local ts is TIME:SECONDS + dt * 0.9.
+      KUNIVERSE:TIMEWARP:WARPTO(ts).
+      wait until TIME:SECONDS > ts.
+      wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+      wait 0.
+
+      if dt > 10 * 10000 {
+        return simpleTransfer(dst, src).
+      }
+
+      KUNIVERSE:TIMEWARP:WARPTO(t).
+      wait until TIME:SECONDS > t.
+      wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+
+
+      wait 1.
+      if dV > 0 {
+        escape(dV, 0).
+      } else {
+        escape(ABS(dV), 180).
+      }
+    } else {
+      return LEX("trueAnomaly", trueAnomaly, "prograde", dV, "normal", 0, "radial", 0).
+    }
   }
 
   //*
@@ -278,7 +335,7 @@
   function tgtArgument {
     parameter tgt is TARGET.
 
-    local tgtpe is 0. // TODO: TARGET PE VECTOR //-vcrs(tgt:VELOCITY:ORBIT,BODY:POSITION-tgt:POSITION).
+    local tgtpe is 0. // TODO: TARGET PE VECTOR //-vcrs(tgt:ORBIT:VELOCITY:ORBIT,BODY:POSITION-tgt:POSITION).
     adjustInclination(tgtpe).
   }
 
@@ -324,7 +381,7 @@
   function tgtInclination {
     parameter tgt is TARGET.
 
-    local tgtnrml is -vcrs(tgt:VELOCITY:ORBIT,BODY:POSITION-tgt:POSITION).
+    local tgtnrml is -vcrs(tgt:ORBIT:VELOCITY:ORBIT,BODY:POSITION-tgt:POSITION).
     adjustInclination(tgtnrml).
   }
   //*
@@ -419,11 +476,22 @@
     //  BODY:MU
     //).
     local lock curMnvVel to orbit["getVelVector"](curMnvTrue).
-    //local lock diff to curMnvVel - SHIP:VELOCITY:ORBIT.
+    //local lock diff to curMnvVel - SHIP:ORBIT:VELOCITY:ORBIT.
     local lock diff to math["loadVector"](mnvVelStored) - curMnvVel.
     lock STEERING to LOOKDIRUP(diff, SHIP:FACING:TOPVECTOR).
 
     local done is false.
+    local guiCtx is gui["createContext"]("maneuver").
+    local logGui is guiCtx["log"].
+    local trackGui is guiCtx["track"].
+    local vecGui is guiCtx["vec"].
+
+
+    logGui("dV total", maneuvernode:BURNVECTOR:MAG, "m/s").
+    logGui("dV remaining", maneuvernode:BURNVECTOR:MAG, "m/s").
+    trackGui("throttle", { return THROTTLE. }).
+    trackGui("time to node", { return nodetime - TIME:SECONDS. }, "s").
+    trackGui("time to burn", { return burntime - TIME:SECONDS. }, "s").
     on TIME:SECONDS {
       return.
       CLEARVECDRAWS().
@@ -436,7 +504,7 @@
       VECDRAW(BODY:POSITION, math["loadVector"](mnvPosStored), rgb(255,200,0), "mnvPos", 1, true).
       VECDRAW(V(0,0,0), diff, white, "diff", 1, true).
       VECDRAW(V(0,0,0), curMnvVel, blue, "curMnvVel", 1, true).
-      VECDRAW(V(0,0,0), SHIP:VELOCITY:ORBIT, red, "vel", 1, true).
+      VECDRAW(V(0,0,0), SHIP:ORBIT:VELOCITY:ORBIT, red, "vel", 1, true).
       VECDRAW(V(0,0,0), math["loadVector"](mnvVelStored), purple, "mnvVel", 1, true).
       VECDRAW(V(0,10,0), math["loadVector"](mnvEccStored):NORMALIZED, white, "Ecc", 1, true).
       VECDRAW(V(0,10,0), math["loadVector"](mnvNrmlStored):NORMALIZED, yellow, "Nrml", 1, true).
@@ -450,11 +518,17 @@
     if CAREER():CANMAKENODES {
       lock STEERING to LOOKDIRUP(maneuvernode:BURNVECTOR, SHIP:FACING:TOPVECTOR).
       lock THROTTLE to CLAMP(0.01, 1, maneuvernode:BURNVECTOR:MAG / (acc * 2)).
-      wait until maneuvernode:BURNVECTOR:MAG < SHIP:MAXTHRUST / SHIP:MASS * 0.01 or VANG(maneuvernode:BURNVECTOR, util["getThrustVector"]()) > 90.
+      trackGui("dV remaining", { return maneuvernode:BURNVECTOR:MAG. }, "m/s").
+      trackGui("precision", { return SHIP:MAXTHRUST / SHIP:MASS * 0.001. }, "m/s").
+      trackGui("angle offset", { return VANG(maneuvernode:BURNVECTOR, util["getThrustVector"]()). }, "°").
+      wait until maneuvernode:BURNVECTOR:MAG < SHIP:MAXTHRUST / SHIP:MASS * 0.001 or VANG(maneuvernode:BURNVECTOR, util["getThrustVector"]()) > 45.
     } else {
       lock STEERING to LOOKDIRUP(diff, SHIP:FACING:TOPVECTOR).
       lock THROTTLE to CLAMP(0.01, 1, diff:MAG / (acc * 2)).
-      wait until diff:MAG < SHIP:MAXTHRUST / SHIP:MASS * 0.01 or VANG(diff, util["getThrustVector"]()) > 90.
+      trackGui("dV remaining", { return diff:MAG. }, "m/s").
+      trackGui("precision", { return SHIP:MAXTHRUST / SHIP:MASS * 0.001. }, "m/s").
+      trackGui("angle offset", { return VANG(diff, util["getThrustVector"]()). }, "°").
+      wait until diff:MAG < SHIP:MAXTHRUST / SHIP:MASS * 0.001 or VANG(diff, util["getThrustVector"]()) > 45.
     }
     lock THROTTLE to 0.
 
@@ -463,7 +537,7 @@
     //awaitInput().
 
     set done to true.
-    CLEARVECDRAWS().
+    guiCtx["remove"]().
 
     wait 1.
     if CAREER():CANMAKENODES {

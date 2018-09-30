@@ -3,16 +3,16 @@
   local maneuver is import("lib/maneuver").
   local orbit is import("lib/orbit").
 
-  local lan is 66.7.
-  local inc is 41.1.
-  local arg is 24.9.
-  local apo is 30664600.
-  local peri is 23329780.
+  local lan is 0.
+  local inc is 90.
+  local arg is 0.
+  local apo is 250000.
+  local peri is 250000.
 
   local obt is LEX(
     "LAN", lan,
     "INC", inc,
-    "ARG", arg,
+    //"ARG", arg,
     "AP", apo,
     "PE", peri
   ).
@@ -33,9 +33,11 @@
   print "Circularizing again.".
   maneuver["circularize"]().
 
-  print "Adjusting argument.".
-  local argumentVec is ANGLEAXIS(arg, -tgtnrml) * orbit["trueToVec"](orbit["ascendingTrueAnomaly"]()).
-  maneuver["adjustArgument"](argumentVec).
+  if obt:HASKEY("ARG") {
+    print "Adjusting argument.".
+    local argumentVec is ANGLEAXIS(arg, -tgtnrml) * orbit["trueToVec"](orbit["ascendingTrueAnomaly"]()).
+    maneuver["adjustArgument"](argumentVec).
+  }
 
   print "Raising Apoapsis.".
   maneuver["raiseAp"](apo).
@@ -59,9 +61,11 @@
   local tgtnrml is ANGLEAXIS(-inc,ascendingVec) * -BODY:ANGULARVEL.
   maneuver["adjustInclination"](tgtnrml).
 
-  print "Adjusting argument.".
-  local argumentVec is ANGLEAXIS(arg, -tgtnrml) * orbit["trueToVec"](orbit["ascendingTrueAnomaly"]()).
-  maneuver["adjustArgument"](argumentVec).
+  if obt:HASKEY("ARG") {
+    print "Adjusting argument.".
+    local argumentVec is ANGLEAXIS(arg, -tgtnrml) * orbit["trueToVec"](orbit["ascendingTrueAnomaly"]()).
+    maneuver["adjustArgument"](argumentVec).
+  }
 
   print "Raising Apoapsis.".
   maneuver["raiseAp"](apo).

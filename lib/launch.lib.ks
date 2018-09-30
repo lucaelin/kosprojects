@@ -1,6 +1,7 @@
 @lazyglobal off.
 {
   local maneuver is import("lib/maneuver").
+  local gui is import("lib/gui").
 
   local stagecontroller is false.
   local enginelist is LIST().
@@ -72,8 +73,9 @@
       print "Target has a low inclination. Lauching at lowest relative inclination.".
     }
 
-    local launchtime is TIME:SECONDS + (meanAtLowestInc + launchAngle)/360 * BODY:ROTATIONPERIOD.
-    KUNIVERSE:TIMEWARP:WARPTO(launchtime).
+    local offsetTime is -30.
+    local launchtime is TIME:SECONDS + offsetTime + (meanAtLowestInc + launchAngle)/360 * BODY:ROTATIONPERIOD.
+    KUNIVERSE:TIMEWARP:WARPTO(launchtime - 10).
     wait until TIME:SECONDS > launchtime.
     wait until KUNIVERSE:TIMEWARP:ISSETTLED.
     wait 1.
@@ -105,7 +107,9 @@
 
     lock STEERING to UPTOP.
     lock THROTTLE to thrott.
-    STAGE.
+    if SHIP:AVAILABLETHRUST = 0 {
+      STAGE.
+    }
     wait until SHIP:VELOCITY:SURFACE:MAG > speed.
   }.
 
@@ -118,10 +122,22 @@
     parameter height is 85000.
     parameter head is {return 90.}.
 
+    local guiCtx is gui["createContext"]("gravitiyturn").
+    local logGui is guiCtx["log"].
+
     local turnStartAltitude is SHIP:ALTITUDE.
-    lock STEERING to HEADING(head:CALL(), 90-(90*SQRT((SHIP:ALTITUDE-turnStartAltitude)/(height-turnStartAltitude)))).
-    wait until APOAPSIS > height.
+    lock STEERING to HEADING(head:CALL(), 90-(90*SQRT(MAX(0, SHIP:ALTITUDE-turnStartAltitude)/(height-turnStartAltitude)))).
+    until APOAPSIS > height {
+      logGui("Apoapsis", ROUND(APOAPSIS) + " / " + height).
+      logGui("Periapsis", PERIAPSIS).
+      logGui("Heading", head:CALL()).
+      logGui("Horizontal angle", 90 - VANG(SHIP:UP:VECTOR, SHIP:FACING:FOREVECTOR)).
+      logGui("Angle of attack", VANG(SHIP:ORBIT:VELOCITY:SURFACE, SHIP:FACING:FOREVECTOR)).
+      wait 0.
+    }
     lock THROTTLE to 0.
+
+    guiCtx["remove"]().
   }.
 
   //*
@@ -129,6 +145,7 @@
   //* TODO: consider using RCS to compensate losses due to drag
   //*
   function leaveATM {
+    lock STEERING to SURFACEPROGRADE.
     wait until ALTITUDE > BODY:ATM:HEIGHT. // TODO: correct drag losses
     wait 1.
   }.
@@ -142,18 +159,24 @@
     parameter alt is 85000.
     parameter tgtnrml is -vcrs(TARGET:VELOCITY:ORBIT,BODY:POSITION-TARGET:POSITION).
 
+    local guiCtx is gui["createContext"]("launch").
+    local logGui is guiCtx["log"].
+
     local head is awaitLaunch(tgtnrml).
     setStagecontroller(true).
-    print "VASCEND.".
+    logGui("Mode", "VASCEND").
     verticalAscend().
-    print "GRAVITIYTURN.".
+    logGui("Mode", "GRAVITIYTURN").
     gravitiyturn(alt, head).
-    print "COASTING OUT OF ATM.".
+    logGui("Mode", "COASTING OUT OF ATM").
     leaveATM().
-    print "CIRCULARIZE.".
+    logGui("Mode", "CIRCULARIZE").
     maneuver["circularize"]().
+    logGui("Mode", "ASCEND COMPLETE").
     print "ASCEND COMPLETE.".
     setStagecontroller(false).
+
+    guiCtx["remove"]().
   }.
 
   //*
@@ -164,21 +187,28 @@
   function launch {
     parameter alt is 85000.
     parameter head is {return 90.}.
+    parameter turnStartSpeed is 100.
+
+    local guiCtx is gui["createContext"]("launch").
+    local logGui is guiCtx["log"].
+
     setStagecontroller(true).
-    print "VASCEND.".
-    verticalAscend().
-    print "GRAVITIYTURN.".
+    logGui("Mode", "VASCEND").
+    verticalAscend(turnStartSpeed).
+    logGui("Mode", "GRAVITIYTURN").
     gravitiyturn(alt, head).
-    print "COASTING OUT OF ATM.".
+    logGui("Mode", "COASTING OUT OF ATM").
     leaveATM().
-    print "CIRCULARIZE.".
+    logGui("Mode", "CIRCULARIZE").
     maneuver["circularize"]().
+    logGui("Mode", "ASCEND COMPLETE").
     print "ASCEND COMPLETE.".
     setStagecontroller(false).
   }.
 
   export(lex(
     "setStagecontroller", setStagecontroller@,
+    "awaitLaunch", awaitLaunch@,
     "verticalAscend", verticalAscend@,
     "gravitiyturn", gravitiyturn@,
     "leaveATM", leaveATM@,

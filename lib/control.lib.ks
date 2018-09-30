@@ -5,6 +5,7 @@
   //* usually there are two functions one to enable the feature and one to disable it again
   //*
 
+  local gui is import("lib/gui").
 
   // Automatic staging
   local stagecontrollerActive is false.
@@ -57,6 +58,8 @@
     parameter targetspeed is { return 0. }.
     parameter kP is 10.
 
+    gui["show"]("Creating burn controller.").
+
     set vSpeedActive to true.
     local state is LEX().
 
@@ -68,7 +71,7 @@
 
       local acc is VDOT(SHIP:UP:VECTOR, SHIP:FACING:VECTOR) * SHIP:AVAILABLETHRUST / SHIP:MASS.
       //print "acc: " + acc at(0,0).
-      local g is BODY:MU / BODY:RADIUS^2.
+      local g is BODY:MU / (BODY:RADIUS + SHIP:ALTITUDE)^2.
       //print "  g: " + g at(0,1).
       local avgThrottle to g / acc.
       //print "avg: " + avgThrottle at(0,2).
@@ -105,9 +108,10 @@
     parameter lookahead is 0.
     parameter Klimit is 8.
     parameter Kp is 10.
+    parameter AoA is 180.
 
     set hSpeedActive to true.
-    local state is LEX().
+    local guictx is gui["createContext"]("hSpeed control").
 
     local targetVelFn is { return VXCL(SHIP:UP:VECTOR, targetVelParam()). }.
 
@@ -115,29 +119,26 @@
     lock STEERING to LOOKDIRUP(steer, SHIP:FACING:TOPVECTOR).
 
     on TIME:SECONDS {
-      CLEARVECDRAWS().
-
       local maxAcc is SHIP:AVAILABLETHRUST / SHIP:MASS.
       local avgAcc is maxAcc * minThrottle.
       local currAcc is maxAcc * THROTTLE.
 
       local targetVelVec to targetVelFn().
-      VECDRAW(V(0,0,0), targetVelVec, green, "targetVel", 1, true, .2).
+      guictx["vec"]("targetVel", targetVelVec, green).
       local velVec is VXCL(SHIP:UP:VECTOR, SHIP:VELOCITY:SURFACE).
-      VECDRAW(V(0,0,0), velVec, red, "vel", 1, true, .2).
+      guictx["vec"]("vel", velVec, red).
 
       local rot is SHIP:ANGULARVEL * lookahead / 2.
       local accVec is VXCL(SHIP:UP:VECTOR, ANGLEAXIS(rot:MAG * RADTODEG, rot) * SHIP:FACING:VECTOR) * MAX(avgAcc, currAcc).
       if hSpeedInverted {
         set accVec to -accVec.
       }
-      VECDRAW(velVec, lookahead*accVec, blue, "acc", 1, true, .2).
+      guictx["vec"]("acc", lookahead*accVec, blue, velVec).
 
       local velError is targetVelVec - (velVec + lookahead*accVec).
       local targetAccVec is velError:NORMALIZED * clamp(-Klimit, Klimit, velError:MAG * 10).
 
 
-      //local state is (targetAccVec / avgAcc)/SQRT(MAX(0.1,1-(targetAccVec:MAG / avgAcc)^2)).
       local hAccVec is targetAccVec.
       //print maxAcc * minThrottle.
       //print targetAccVec:MAG.
@@ -148,15 +149,18 @@
         set hAccVec to -hAccVec.
       }
       set steer to vAccVec + hAccVec.//topSteer + starSteer.
+      if VANG(steer, SURFACERETROGRADE:VECTOR) > AoA {
+        local axis is VCRS(SURFACERETROGRADE:VECTOR, steer).
+        set steer to SURFACERETROGRADE:VECTOR * ANGLEAXIS(AoA, axis).
+      }
       //print VANG(STEER,targetVelVec).
-      VECDRAW(V(0,0,0), steer, yellow, "steer", 10, true, .02).
+      guictx["vec"]("steer", steer, yellow).
       //VECDRAW(10*UPTOP:VECTOR, topSteer, green, "steerTop", 10, true, .02).
       //VECDRAW(10*UPTOP:VECTOR, starSteer, yellow, "steerStar", 10, true, .02).
 
       if hspeedactive {PRESERVE.}
+      else guictx["remove"]().
     }
-
-    return state.
   }
   function hSpeedInvert {
     parameter val is true.

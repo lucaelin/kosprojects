@@ -1,0 +1,2 @@
+print "IF YOU SEE THIS, ITS WORKING!11".
+CORE:DOEVENT("Open Terminal").

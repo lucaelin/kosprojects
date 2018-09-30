@@ -1,0 +1,7 @@
+
+  local g is GUI(400).
+  local ids is LEX().
+  run "0:/interface.xml.ks"(g, ids).
+  g:SHOW.
+  set ids["myelement"]:TEXT to "FANCY!".
+wait until false.

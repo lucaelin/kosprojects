@@ -90,8 +90,10 @@
   function vecToMean {
     parameter vec.
     parameter e is SHIP:ORBIT:ECCENTRICITY.
+    parameter pe is getPeriapsisVector().
+    parameter normVec is NORMAL:VECTOR:NORMALIZED.
 
-    return math["trueToMean"](vecToTrue(vec), e).
+    return math["trueToMean"](vecToTrue(vec, pe, normVec), e).
   }
 
   function trueToVec {

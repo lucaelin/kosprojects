@@ -31,7 +31,7 @@
   print "Circularizing again.".
   maneuver["circularize"]().
 
-  until STAGE:NUMBER = 1 {
+  until STAGE:NUMBER = 0 {
     wait until STAGE:READY.
     stage.
     wait 1.

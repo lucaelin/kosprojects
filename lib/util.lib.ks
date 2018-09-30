@@ -14,7 +14,12 @@
     return thrustVec.
   }
 
+  function awaitInput {
+
+  }
+
   export(lex(
-    "getThrustVector", getThrustVector@
+    "getThrustVector", getThrustVector@,
+    "awaitInput", awaitInput@
   )).
 }

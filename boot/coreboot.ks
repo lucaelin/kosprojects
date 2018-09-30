@@ -121,7 +121,7 @@
 
     RUNPATH(initscript).
 
-    print "InitScript has been executed.".
+    print "InitScript finished.".
     until not TERMINAL:INPUT:HASCHAR() {
       TERMINAL:INPUT:GETCHAR().
     }.
