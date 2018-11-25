@@ -18,8 +18,27 @@
 
   }
 
+  function warpTill {
+    parameter fn.
+    parameter maxx is 10000.
+    
+    wait 0.
+    local x is 1.
+    until (x > maxx) or fn() {
+      set KUNIVERSE:TIMEWARP:RATE to x.
+      set x to x*10.
+      wait 1.
+    }
+    wait until fn().
+    KUNIVERSE:TIMEWARP:CANCELWARP().
+    wait 0.
+    wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+    wait 1.
+  }
+
   export(lex(
     "getThrustVector", getThrustVector@,
-    "awaitInput", awaitInput@
+    "awaitInput", awaitInput@,
+    "warpTill", warpTill@
   )).
 }

@@ -24,7 +24,7 @@
     lock STEERING to tgtRetrograde(tgt).
 
     print "Awaiting close approach.".
-    local closeanomaly is math["trueAtRadius"](BODY:RADIUS + tgt:ORBIT:PERIAPSIS - 5000).
+    local closeanomaly is math["trueAtRadius"](BODY:RADIUS + tgt:ORBIT:PERIAPSIS + closeDist). // TODO make close dist negative or positive depending on the approach (positive for approach at lowest point)
     local closetime is orbit["timeToTrue"](closeanomaly).
     KUNIVERSE:TIMEWARP:WARPTO(TIME:SECONDS + closetime).
     wait until KUNIVERSE:TIMEWARP:ISSETTLED.
@@ -36,6 +36,7 @@
     lock THROTTLE to 1.
     wait until (tgt:VELOCITY:ORBIT - SHIP:VELOCITY:ORBIT):MAG < (SHIP:AVAILABLETHRUST / SHIP:MASS) / 2.
     lock THROTTLE to 0.
+    wait 0.
   }
 
   //*
@@ -50,7 +51,7 @@
 
     print "Closing in on target.".
     until tgt:POSITION:MAG < 1000 {
-      steer(tgt:POSITION / 100).
+      steer(tgt:POSITION / 200).
     }
     print "Closing in on 100m hold.".
     until tgt:POSITION:MAG < 100 {
@@ -80,14 +81,14 @@
     // TODO: make positons relative to port:NODEPOSITION
 
     print "Moving towards port alignment.".
-    until VANG(tgtport:NODEPOSITION, -tgtport:PORTFACING:FOREVECTOR) < 5 {
+    until VANG(tgtport:NODEPOSITION, -tgtport:PORTFACING:FOREVECTOR) < 10 {
       local dist is (tgtport:NODEPOSITION - tgtport:NODEPOSITION:NORMALIZED * 90) / 5.
-      steer(VXCL(tgtport:NODEPOSITION, tgtport:PORTFACING:FOREVECTOR) + dist, 2, tgt).
+      steer(VXCL(tgtport:NODEPOSITION, tgtport:PORTFACING:FOREVECTOR)*3 + dist*3, 2, tgt).
     }
     print "Moving towards port.".
     until tgtport:STATE = "PreAttached" or tgtport:STATE:STARTSWITH("Docked") {
       local alignment is VXCL(tgtport:NODEPOSITION, tgtport:PORTFACING:FOREVECTOR):NORMALIZED * VANG(tgtport:NODEPOSITION, -tgtport:PORTFACING:FOREVECTOR) / 5.
-      steer(tgtport:NODEPOSITION:NORMALIZED + alignment, MIN(tgtport:NODEPOSITION:MAG/20, 1), tgt).
+      steer(tgtport:NODEPOSITION:NORMALIZED + alignment, MIN(tgtport:NODEPOSITION:MAG/10, 1), tgt).
     }
 
     unlock STEERING.

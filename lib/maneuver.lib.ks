@@ -147,13 +147,24 @@
   //*
   //* use a simple hohmann transfer to the given target. this only works if the ship and the target are in the same plane as well as in circular orbits
   //* parameter dst the target to transfer to
+  //* parameter src the orbitable to transfer from
+  //* parameter dryRun only warp close to interplanetary alignment but dont transfer
   //*
   function simpleTransfer {
     parameter dst is TARGET.
     parameter src is SHIP.
+    parameter dryRun is false.
 
+    local guiCtx is gui["createContext"]("Hohmann Transfer").
+    local logGui is guiCtx["log"].
+    local trackGui is guiCtx["track"].
+    local vecGui is guiCtx["vec"].
+
+    local dstW is ( 2 * CONSTANT:PI * dst:ORBIT:SEMIMAJORAXIS * dst:ORBIT:SEMIMINORAXIS ) / (dst:ORBIT:PERIOD * (dst:ALTITUDE + dst:BODY:RADIUS)^2) * RADTODEG.
+    local dstAvgW is 360 / dst:ORBIT:PERIOD.
+    local dstEstW is dstAvgW.
     local s is src:ORBIT:SEMIMAJORAXIS.
-    local d is dst:ORBIT:SEMIMAJORAXIS.
+    local d is dst:ORBIT:SEMIMAJORAXIS.// + 1400000000.
     local h is (s+d)/2.
     local p is 1 / (2 * SQRT(d^3 / h^3)) - 0.5.
 
@@ -168,14 +179,18 @@
     ).
     local srcNormVec is VCRS(srcVel, -srcBodyPos).
 
-    //print "transferangle " + p*360.
+    print "transferangle " + p*360.
     local dstmean is orbit["vecToMean"](dst:POSITION - src:POSITION - srcBodyPos, src:ORBIT:ECCENTRICITY, srcPe, srcNormVec) + p * 360.
     print "dstmean " + dstmean.
     local mymean is orbit["vecToMean"](-srcBodyPos, src:ORBIT:ECCENTRICITY, srcPe, srcNormVec).
     print "mymean " + mymean.
     local meandiff is math["diffAnomaly"](mymean, dstmean).
     print "diff " + meandiff.
-    local catchup is math["orbitalPhasing"](src:ORBIT:PERIOD, dst:ORBIT:PERIOD).
+    print dstW.
+    print "- phasing -".
+    local catchup is math["orbitalPhasingW"](360 / src:ORBIT:PERIOD, dstEstW).
+    print math["orbitalPhasingW"](360 / src:ORBIT:PERIOD, dstEstW).
+    print math["orbitalPhasing"](src:ORBIT:PERIOD, dst:ORBIT:PERIOD).
     print "catchup " + catchup.
     local orbits is 0.
     if catchup > 0  {
@@ -184,7 +199,7 @@
       set orbits to (360-meandiff) / -catchup.
     }
     print "orbits " + orbits + "("+(orbits*src:ORBIT:PERIOD/60/60)+"h)".
-    //print "orbitsdeg " + orbits * 360.
+    print "orbitsdeg " + orbits * 360.
     local startmean is mymean + orbits * 360.
     print "startmean " + startmean.
     local trueAnomaly is math["meanToTrue"](startmean, src:ORBIT:ECCENTRICITY).
@@ -221,23 +236,24 @@
 
     print "deltaV: " + dV.
 
-    if trueAnomaly < 0 {
-      print "soeting waent worng".
-      return.
-    }
-
     if src = SHIP {
       exec(trueAnomaly, dV, 0, 0).
     } else if src = SHIP:BODY {
       local dt is orbits * src:ORBIT:PERIOD.
       local t is TIME:SECONDS + dt.
-      local ts is TIME:SECONDS + dt * 0.9.
+      local ts is TIME:SECONDS + dt * 0.9 - 2*6*60*60.
       KUNIVERSE:TIMEWARP:WARPTO(ts).
       wait until TIME:SECONDS > ts.
       wait until KUNIVERSE:TIMEWARP:ISSETTLED.
-      wait 0.
+      wait 5.
+
+      if dryRun {
+        guiCtx["remove"]().
+        return LEX("trueAnomaly", trueAnomaly, "prograde", dV, "normal", 0, "radial", 0).
+      }
 
       if dt > 10 * 10000 {
+        print "redoing calculation.".
         return simpleTransfer(dst, src).
       }
 
@@ -252,7 +268,9 @@
       } else {
         escape(ABS(dV), 180).
       }
+      guiCtx["remove"]().
     } else {
+      guiCtx["remove"]().
       return LEX("trueAnomaly", trueAnomaly, "prograde", dV, "normal", 0, "radial", 0).
     }
   }
@@ -312,8 +330,9 @@
 
     lock STEERING to RETROGRADE.
 
-    wait 0.
+    wait 1.
     KUNIVERSE:TIMEWARP:WARPTO(burntime - 20 - 1).
+    wait until TIME:SECONDS > burntime - 20 - 1.
     wait until KUNIVERSE:TIMEWARP:ISSETTLED.
     wait 1.
     wait until TIME:SECONDS > burntime.
@@ -375,24 +394,55 @@
   }
 
   //*
-  //* match inclination with a given target
+  //* turn the current orbit into a polar one at the next apoapsis
+  //*
+  function polarize {
+    local pro is VANG(NORMAL:VECTOR:NORMALIZED, -BODY:ANGULARVEL) < 90.
+    local peri is orbit["getPeriapsisVector"]().
+    local ns is -BODY:ANGULARVEL.
+    if not pro {
+      set ns to BODY:ANGULARVEL.
+    }
+    local tgt is VCRS(peri, ns).
+
+    adjustInclination(tgt, false).
+  }
+
+  //*
+  //* match inclination with a given target at the closest ascending or descending node
   //* parameter tgt the target to match inclination with
   //*
   function tgtInclination {
     parameter tgt is TARGET.
 
+    local ascending is true.
+
     local tgtnrml is -vcrs(tgt:ORBIT:VELOCITY:ORBIT,BODY:POSITION-tgt:POSITION).
-    adjustInclination(tgtnrml).
+    local trueAnomaly is orbit["ascendingTrueAnomaly"](tgtnrml).
+    if math["diffAnomaly"](SHIP:ORBIT:TRUEANOMALY, trueAnomaly) > 180 {
+      set ascending to false.
+    }
+
+    adjustInclination(tgtnrml, ascending).
   }
   //*
   //* match inclination with a given normal vector
   //* parameter tgtnrml the normal vector to match
+  //* parameter ascending if the node should be placed at the ascending node
   //*
   function adjustInclination {
     parameter tgtnrml is -BODY:ANGULARVEL.
+    parameter ascending is true.
 
     local trueAnomaly is orbit["ascendingTrueAnomaly"](tgtnrml).
+    if not ascending {
+      set trueAnomaly to orbit["ascendingTrueAnomaly"](-tgtnrml).
+    }
+
     local inclination is VANG(tgtnrml:NORMALIZED, NORMAL:VECTOR:NORMALIZED).
+    if not ascending {
+      set inclination to -inclination.
+    }
     local start is math["velAtTrue"](trueAnomaly).
     local DV is 2 * start * SIN(inclination / 2).
 
@@ -510,8 +560,24 @@
       VECDRAW(V(0,10,0), math["loadVector"](mnvNrmlStored):NORMALIZED, yellow, "Nrml", 1, true).
       if not done PRESERVE.
     }
+
+    local safetymargin is (burntime - TIME:SECONDS) * 0.9.
+    until safetymargin < 60*60*6*10 {
+      wait 1.
+      local warpto is TIME:SECONDS + safetymargin.
+      KUNIVERSE:TIMEWARP:WARPTO(warpto).
+      wait 0.
+      wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+      wait 0.
+      wait until TIME:SECONDS > warpto.
+      wait 0.
+      set safetymargin to (burntime - TIME:SECONDS) * 0.9.
+    }
+    wait 1.
     KUNIVERSE:TIMEWARP:WARPTO(burntime - warpmargin - 1).
+    wait 0.
     wait until KUNIVERSE:TIMEWARP:ISSETTLED.
+    wait 0.
     wait until TIME:SECONDS > burntime.
 
     local lock acc to (SHIP:AVAILABLETHRUST+SHIP:MASS*0.00001) / SHIP:MASS.
@@ -591,6 +657,7 @@
     "escape", escape@,
     "adjustArgument", adjustArgument@,
     "tgtArgument", tgtArgument@,
+    "polarize", polarize@,
     "adjustInclination", adjustInclination@,
     "tgtInclination", tgtInclination@,
     "circularize", circularize@,

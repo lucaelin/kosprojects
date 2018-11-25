@@ -40,7 +40,11 @@
   maneuver["simpleTransfer"]().
 
   lock STEERING to RETROGRADE.
-  wait 20.
+  wait 10.
+  set KUNIVERSE:TIMEWARP:RATE to 100.
+  wait 3.
+  set KUNIVERSE:TIMEWARP:RATE to 1000.
+  wait 3.
   set KUNIVERSE:TIMEWARP:RATE to 10000.
   wait until SHIP:BODY = targetBody.
   KUNIVERSE:TIMEWARP:CANCELWARP().

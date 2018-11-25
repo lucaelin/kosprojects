@@ -44,17 +44,17 @@
     local Klimit is maxSideAcc.
     local hKp is 10.
 
-    local impact is BODY:GEOPOSITIONOF(SHIP:POSITION).
+    local impact is SHIP:GEOPOSITION.
     {
       local idist is 1.
       until idist < 1 {
-        local ypredict is ALTITUDE - impact:TERRAINHEIGHT.
+        local ypredict is ALTITUDE - MAX(0, impact:TERRAINHEIGHT).
         local burnPos is getBurnPosition(vThrottle, ypredict).
         local burnVel is getBurnVelocity(vThrottle, ypredict).
         local ttl is getTimeToLand(vThrottle, ypredict).
         local hVel is VXCL(SHIP:UP:VECTOR, burnVel).
         local hStopTime is hVel:MAG / hacc.
-        if hStopTime > getBurnDuration(vThrottle, ypredict) * 0.8 {
+        if not bodyLift and hStopTime > getBurnDuration(vThrottle, ypredict) * 0.8 {
           gui["error"]("Unable to kill horizontal velocity in time!").
           set vThrottle to findBurnThottle(hStopTime * 1.5, ypredict).
           gui["show"]("Adjusted vThrottle to "+vThrottle).
@@ -63,10 +63,15 @@
         local hStopDist is 0.5 * hVel * hStopTime.
         local impactVec is burnPos + hStopDist.
         local impactGeo is BODY:GEOPOSITIONOF(impactVec).
-        set idist to (impactGeo:POSITION - impact:POSITION):MAG.
+        local impactGeoPos is impactGeo:ALTITUDEPOSITION(MAX(0, impactGeo:TERRAINHEIGHT)).
+        local impactPos is impact:ALTITUDEPOSITION(MAX(0, impact:TERRAINHEIGHT)).
+        set idist to (impactGeoPos - impactPos):MAG.
         print idist.
         set impact to impactGeo.
       }
+    }
+    if bodylift {
+      set impact to BODY:GEOPOSITIONOF(impact:POSITION/2).
     }
 
     // automatic landing prediction
@@ -97,11 +102,14 @@
       set tgt to impact.
     }
 
+    local tgtPos is { return V(0,0,0). }.
     local tgtheight is { return 0. }.
     if tgt:TYPENAME = "Vessel" {
-      set tgtheight to { return tgt:GEOPOSITION:TERRAINHEIGHT. }.
+      set tgtPos to { return tgt:POSITION. }.
+      set tgtheight to { return tgt:ALTITUDE. }.
     } else if tgt:TYPENAME = "GeoCoordinates" {
-      set tgtheight to { return tgt:TERRAINHEIGHT. }.
+      set tgtPos to { return tgt:ALTITUDEPOSITION(MAX(0, tgt:TERRAINHEIGHT)). }.
+      set tgtheight to { return MAX(0, tgt:TERRAINHEIGHT). }.
     } else {
       print "Unknown typename of tgt. Abort.".
       return.
@@ -110,17 +118,17 @@
 
     if not bodylift {
       // pre landing adjustment
-      local diff is tgt:POSITION - impact:POSITION.
+      local diff is tgtPos() - impact:ALTITUDEPOSITION(MAX(0, impact:TERRAINHEIGHT)).
       local tRem is getTimeToBurn(vThrottle, y) - 5.
       local deltaSpeed is diff / tRem.
 
       lock STEERING to deltaSpeed.
-      wait 5.
+      wait 8.
       lock THROTTLE to 0.5.
       wait deltaSpeed:MAG / (maxAcc * 0.5).
       lock THROTTLE to 0.
       lock STEERING to UPTOP.
-      wait 1.
+      wait 3.
     }
 
     control["vSpeed"]({
@@ -152,15 +160,15 @@
       local burnPos is getBurnPosition(vThrottle, y).
       local burnVel is getBurnVelocity(vThrottle, y).
 
-      local tgtpos is (tgt:POSITION - (burnPos + burnVel * lookahead)) + tgt:VELOCITY:SURFACE * getTimeToLand(vThrottle).
+      local aim is (tgtPos() - (burnPos + burnVel * lookahead)) + tgt:VELOCITY:SURFACE * getTimeToLand(vThrottle).
 
-      vecGui("aim", tgtpos, white).
+      vecGui("aim", aim, white).
       vecGui("burnPos", burnPos, blue).
-      vecGui("tgt", tgt:POSITION, white).
+      vecGui("tgt", tgtPos(), white).
       vecGui("burnVel", burnVel, yellow).
       vecGui("vel", SHIP:VELOCITY:SURFACE, red).
       logGui("q", SHIP:Q).
-      local dist is VXCL(SHIP:UP:VECTOR, tgtpos).
+      local dist is VXCL(SHIP:UP:VECTOR, aim).
       local tvel is SQRT(2*hacc*MAX(0,dist:MAG-4)).
       local tvelLin is dist:MAG / 1.5.
 
@@ -182,10 +190,10 @@
 
     if bodylift {
       on THROTTLE {
-        control["hSpeedInvert"](THROTTLE = 0 or SHIP:Q > 0.20).
+        control["hSpeedInvert"](THROTTLE = 0 or SHIP:Q > 0.15).
         if not done {PRESERVE.}
       }
-      control["hSpeedInvert"](THROTTLE = 0 or SHIP:Q > 0.20).
+      control["hSpeedInvert"](THROTTLE = 0 or SHIP:Q > 0.15).
     }
 
     local t is TIME:SECONDS.
@@ -308,6 +316,15 @@
       lock STEERING to SURFACEPROGRADE.
     } else {
       lock STEERING to SURFACERETROGRADE.
+    }
+    wait 0.
+
+    when SHIP:ALTITUDE > SHIP:BODY:ATM:HEIGHT then {
+      PANELS on.
+
+      when SHIP:ALTITUDE < SHIP:BODY:ATM:HEIGHT then {
+        PANELS off.
+      }
     }
 
     wait until SHIP:VELOCITY:SURFACE:MAG < 1000.

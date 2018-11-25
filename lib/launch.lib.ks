@@ -121,12 +121,18 @@
   function gravitiyturn {
     parameter height is 85000.
     parameter head is {return 90.}.
+    parameter profile is 0.
+
+    set profile to 0.3 * profile.
 
     local guiCtx is gui["createContext"]("gravitiyturn").
     local logGui is guiCtx["log"].
 
     local turnStartAltitude is SHIP:ALTITUDE.
-    lock STEERING to HEADING(head:CALL(), 90-(90*SQRT(MAX(0, SHIP:ALTITUDE-turnStartAltitude)/(height-turnStartAltitude)))).
+    lock STEERING to HEADING(
+      head:CALL(),
+      90-(90*(MAX(0, SHIP:ALTITUDE-turnStartAltitude)/(height-turnStartAltitude))^(0.5-profile))
+    ).
     until APOAPSIS > height {
       logGui("Apoapsis", ROUND(APOAPSIS) + " / " + height).
       logGui("Periapsis", PERIAPSIS).
@@ -158,6 +164,8 @@
   function launchTarget {
     parameter alt is 85000.
     parameter tgtnrml is -vcrs(TARGET:VELOCITY:ORBIT,BODY:POSITION-TARGET:POSITION).
+    parameter turnStartSpeed is 100.
+    parameter profile is 0.
 
     local guiCtx is gui["createContext"]("launch").
     local logGui is guiCtx["log"].
@@ -165,9 +173,9 @@
     local head is awaitLaunch(tgtnrml).
     setStagecontroller(true).
     logGui("Mode", "VASCEND").
-    verticalAscend().
+    verticalAscend(turnStartSpeed).
     logGui("Mode", "GRAVITIYTURN").
-    gravitiyturn(alt, head).
+    gravitiyturn(alt, head, profile).
     logGui("Mode", "COASTING OUT OF ATM").
     leaveATM().
     logGui("Mode", "CIRCULARIZE").
@@ -188,6 +196,7 @@
     parameter alt is 85000.
     parameter head is {return 90.}.
     parameter turnStartSpeed is 100.
+    parameter profile is 0.
 
     local guiCtx is gui["createContext"]("launch").
     local logGui is guiCtx["log"].
@@ -196,7 +205,7 @@
     logGui("Mode", "VASCEND").
     verticalAscend(turnStartSpeed).
     logGui("Mode", "GRAVITIYTURN").
-    gravitiyturn(alt, head).
+    gravitiyturn(alt, head, profile).
     logGui("Mode", "COASTING OUT OF ATM").
     leaveATM().
     logGui("Mode", "CIRCULARIZE").

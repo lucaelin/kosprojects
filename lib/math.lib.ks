@@ -14,6 +14,12 @@
 
     return -(360 / b - 360 / a) * a.
   }
+  function orbitalPhasingW {
+    parameter a.
+    parameter b.
+
+    return -(b - a) / (a / 360).
+  }
   function diffAnomaly {
     parameter a.
     parameter b.
@@ -137,6 +143,7 @@
   }
 
   export(lex(
+    "orbitalPhasingW", orbitalPhasingW@,
     "orbitalPhasing", orbitalPhasing@,
     "diffAnomaly", diffAnomaly@,
     "eccToTrue", eccToTrue@,

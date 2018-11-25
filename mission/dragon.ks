@@ -1,10 +1,23 @@
 {
-  set SHIPNAME to SHIPNAME:SPLIT(" @ ")[0].
-
   local landing is import("lib/landing").
   local maneuver is import("lib/maneuver").
   local docking is import("lib/docking").
   local orbit is import("lib/orbit").
+
+  set TARGET to VESSEL("Desire Station").
+  local lan is TARGET:ORBIT:LAN.
+  local inc is TARGET:ORBIT:INCLINATION.
+
+  local obt is LEX(
+    "LAN", lan,
+    "INC", inc
+  ).
+
+  local launcher to PROCESSOR("launcher").
+  launcher:CONNECTION:SENDMESSAGE(obt).
+
+  recvMsg().
+  set SHIPNAME to SHIPNAME:SPLIT(" @ ")[0].
 
   print "Circularizing.".
   maneuver["circularize"]().
@@ -41,16 +54,16 @@
 
   lock STEERING to SURFACERETROGRADE.
 
-  wait until ALT:RADAR < 9000.
+  wait until ALT:RADAR < 7000.
 
   local tgt is "somewhere".
   local thrott is 0.6.
   local height is 2.0.
-  local AoA is 45.
+  local AoA is 30.
   local hThrott is 0.5.
   local lookahead is 0.8.
   local bodylift is true.
-  local ttiMult is 0.0.
+  local ttiMult is 1.0.
 
   landing["land"](tgt, thrott, height, AoA, hThrott, lookahead, bodylift, ttiMult).
 
